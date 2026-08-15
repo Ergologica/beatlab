@@ -1,0 +1,17 @@
+{
+  "name": "BeatLab — drum machine & synth",
+  "short_name": "BeatLab",
+  "description": "Drum machine e synth nel browser: strumenti sardi sintetizzati, chitarra hardcore, generatore di pattern, export MP3/WAV/MIDI.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0e11",
+  "theme_color": "#0c0e11",
+  "lang": "it",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

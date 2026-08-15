@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatLab — drum machine &amp; synth</title>
+<meta name="description" content="Drum machine e synth nel browser: strumenti sardi sintetizzati, chitarra hardcore, generatore di pattern, export MP3/WAV/MIDI. Nessun sample: tutto è sintesi.">
+<meta name="theme-color" content="#0c0e11">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#0c0e11; --panel:#14181e; --panel2:#1b2027; --line:#262d36;
+  --tx:#e6e9ee; --tx2:#8b95a3; --tx3:#5b6472;
+  --amber:#e8a33d; --red:#e05252; --teal:#3dc9b0; --violet:#9a7bd8;
+  --on:#e8a33d; --acc:#ffd58a; --ghost:#7a5b28;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);
+  font:13px/1.45 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+button,select,input{font:inherit;color:inherit}
+.wrap{max-width:1400px;margin:0 auto;padding:14px 16px 70px}
+
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:17px;margin:0;letter-spacing:.02em;font-weight:650}
+h1 span{color:var(--amber)}
+.sub{color:var(--tx3);font-size:12px}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.row{display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap}
+.row+.row{margin-top:9px;padding-top:9px;border-top:1px solid #1e242c}
+.spacer{flex:1}
+
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+  padding:6px 12px;cursor:pointer;transition:.12s;white-space:nowrap}
+.btn:hover{background:#242b34;border-color:#3a434f}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--amber);color:#1a1206;border-color:var(--amber);font-weight:650}
+.btn.primary:hover{background:#f2b357}
+.btn.on{background:var(--teal);color:#06201c;border-color:var(--teal);font-weight:650}
+.btn.sm{padding:4px 9px;font-size:12px;border-radius:6px}
+
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3)}
+.field select,.field input[type=number],.field input[type=text]{
+  background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;min-width:60px}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;
+  background:#2c343e;outline:none;width:100%;margin:9px 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:var(--amber);cursor:pointer;border:2px solid #0c0e11}
+input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;
+  background:var(--amber);cursor:pointer;border:2px solid #0c0e11}
+
+.slots{display:flex;gap:5px}
+.slot{width:34px;height:31px;border-radius:6px;background:var(--panel2);
+  border:1px solid var(--line);cursor:pointer;font-weight:650;color:var(--tx2);position:relative}
+.slot.sel{background:var(--amber);color:#1a1206;border-color:var(--amber)}
+.slot.playing{box-shadow:0 0 0 2px var(--teal)}
+.slot i{position:absolute;right:3px;bottom:1px;font-style:normal;font-size:8px;opacity:.7}
+.chain{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  padding:5px 8px;width:130px;letter-spacing:.18em;text-transform:uppercase}
+#seed{width:104px;font-variant-numeric:tabular-nums}
+
+/* ---- griglia ---- */
+.gridwrap{overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.grid{display:inline-block;min-width:100%}
+.grow{display:flex;align-items:center;height:28px;margin-bottom:3px}
+.glabel{width:158px;flex:0 0 158px;font-size:11.5px;color:var(--tx2);display:flex;
+  align-items:center;gap:4px;padding-right:8px}
+.glabel .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.glabel select{background:#11151a;border:1px solid var(--line);border-radius:4px;
+  font-size:10px;padding:1px 2px;color:var(--tx3);width:38px}
+.glabel select.tri{color:var(--violet);border-color:#463a63}
+.mini{width:18px;height:18px;line-height:16px;text-align:center;border-radius:4px;
+  background:var(--panel2);border:1px solid var(--line);font-size:9px;cursor:pointer;
+  color:var(--tx3);padding:0;flex:0 0 auto}
+.mini.act{background:var(--red);color:#fff;border-color:var(--red)}
+.mini.solo.act{background:var(--teal);color:#04211d;border-color:var(--teal)}
+.cells{display:flex}
+.cell{height:24px;border-radius:4px;background:#1a1f26;border:1px solid #232a33;
+  cursor:pointer;position:relative;transition:background .06s;margin-right:2px;
+  touch-action:none;flex:0 0 auto}
+.cell.beat{background:#20262f}
+.cell.bar{border-left:2px solid #3d4854}
+.cell.on{background:var(--on);border-color:var(--acc)}
+.cell.on.acc{background:var(--acc);box-shadow:inset 0 0 0 1px #fff6}
+.cell.on.gh{background:var(--ghost)}
+.playhead{height:4px;display:flex;margin:0 0 6px 158px}
+.ph{height:4px;border-radius:2px;background:#1a1f26;margin-right:2px;flex:0 0 auto}
+.ph.a{background:var(--teal)}
+
+.ngrid .grow{height:20px;margin-bottom:2px}
+.ngrid .glabel{justify-content:flex-end;padding-right:10px;font-size:10.5px;color:var(--tx3)}
+.ngrid .cell{height:18px}
+.ngrid .grow.root .glabel{color:var(--amber);font-weight:650}
+.ngrid .grow.root .cell{background:#1e242c}
+.ngrid .grow.root .cell.beat{background:#242b34}
+.ngrid .cell.on,.ngrid .grow.root .cell.on,.ngrid .grow.root .cell.on.beat{
+  background:var(--teal);border-color:#8ff0dd}
+.ngrid .cell.on.acc{background:#8ff0dd}
+.ngrid .cell.on.gh{background:#1e6459}
+.ngrid .cell.on.tail,.ngrid .grow.root .cell.on.tail,.ngrid .grow.root .cell.on.tail.beat{
+  background:#1e7a6c;border-color:#1e7a6c;border-radius:0}
+
+.tabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+.tab{padding:5px 11px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);
+  cursor:pointer;font-size:12px;color:var(--tx2)}
+.tab.sel{background:var(--teal);color:#04211d;border-color:var(--teal);font-weight:650}
+
+.brush{display:flex;gap:4px;align-items:center}
+.bb{padding:4px 10px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);
+  cursor:pointer;font-size:11.5px;color:var(--tx2);display:flex;align-items:center;gap:5px}
+.bb .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.bb.sel{border-color:var(--amber);color:var(--tx);background:#242b34}
+
+.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+.ctl{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.ctl .t{font-size:11px;color:var(--tx2);display:flex;justify-content:space-between;gap:6px}
+.ctl .t b{color:var(--tx);font-weight:600}
+.hint{color:var(--tx3);font-size:11.5px;margin:7px 0 0}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3);
+  margin:0 0 9px;font-weight:600;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.chip{font-size:10px;padding:1px 7px;border-radius:20px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--tx3);text-transform:none;letter-spacing:0}
+#status{font-size:11.5px;color:var(--tx3)}
+.dot{width:7px;height:7px;border-radius:50%;background:#39424f;display:inline-block;margin-right:5px}
+.dot.live{background:var(--teal);box-shadow:0 0 6px var(--teal)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(80px);
+  background:#222932;border:1px solid #3a434f;border-radius:9px;padding:9px 15px;
+  box-shadow:0 8px 28px #000a;opacity:0;transition:.25s;pointer-events:none;z-index:50;
+  display:flex;gap:12px;align-items:center;max-width:90vw}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+@media (max-width:760px){
+  .glabel{width:118px;flex:0 0 118px}
+  .playhead{margin-left:118px}
+  .wrap{padding:10px 10px 70px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Beat<span>Lab</span></h1>
+  <span class="sub">drum machine · synth · strumenti sardi · chitarra hardcore</span>
+  <span class="spacer"></span>
+  <span id="status"><span class="dot" id="dot"></span><span id="statustx">audio non avviato</span></span>
+</header>
+
+<div class="panel">
+  <div class="row">
+    <button class="btn primary" id="play">▶ Play</button>
+    <button class="btn" id="stop">■ Stop</button>
+    <div class="field"><label>BPM</label><input type="number" id="bpm" min="40" max="240" value="100" style="width:70px"></div>
+    <div class="field"><label>Swing</label><input type="range" id="swing" min="0" max="60" value="14" style="width:80px"></div>
+    <div class="field"><label>Umanizza tempo</label><input type="range" id="humt" min="0" max="100" value="35" style="width:80px"></div>
+    <div class="field"><label>Umanizza dinamica</label><input type="range" id="humv" min="0" max="100" value="30" style="width:80px"></div>
+    <div class="field"><label>Tonica</label><select id="root"></select></div>
+    <div class="field"><label>Modo</label>
+      <select id="scale">
+        <option value="dorian" selected>dorico</option>
+        <option value="minor">minore naturale</option>
+        <option value="phrygian">frigio</option>
+        <option value="minorpent">pentatonica min.</option>
+        <option value="major">maggiore</option>
+        <option value="harmminor">minore armonica</option>
+      </select></div>
+    <span class="spacer"></span>
+    <div class="field"><label>Pattern</label><div class="slots" id="slots"></div></div>
+    <div class="field"><label>Battute (di questo)</label>
+      <select id="bars"><option>1</option><option selected>2</option><option>4</option><option>8</option></select></div>
+    <div class="field"><label>Catena (song)</label><input class="chain" id="chain" value="AABA"></div>
+    <button class="btn" id="songmode">Song: off</button>
+  </div>
+
+  <div class="row">
+    <div class="field"><label>Stile</label>
+      <select id="style">
+        <option value="boombap">boom bap</option>
+        <option value="breakbeat" selected>breakbeat hiphop</option>
+        <option value="dbeat">d-beat hardcore</option>
+        <option value="ethno">ethno sardo</option>
+        <option value="trap">trap</option>
+      </select></div>
+    <button class="btn primary" id="gen">✦ Genera</button>
+    <div class="field"><label>Seed</label><input type="text" id="seed" value=""></div>
+    <button class="btn" id="regen" title="Rigenera identico con questo seed">↻ Rigenera</button>
+    <button class="btn" id="vary" title="Copia il pattern nello slot successivo e lo varia">≈ Variazione</button>
+    <button class="btn" id="genall">Genera A→D</button>
+    <span class="spacer"></span>
+    <button class="btn" id="undo" title="Ctrl+Z">↶ Annulla</button>
+    <button class="btn" id="redo" title="Ctrl+Shift+Z">↷ Rifai</button>
+    <button class="btn" id="copy">Copia in →</button>
+    <button class="btn" id="clear">Svuota</button>
+  </div>
+
+  <div class="row">
+    <div class="field"><label>Durata export</label>
+      <select id="reps">
+        <option value="1">×1</option><option value="2" selected>×2</option>
+        <option value="4">×4</option><option value="8">×8</option><option value="16">×16</option>
+      </select></div>
+    <button class="btn primary" id="expmp3">↓ MP3</button>
+    <button class="btn" id="expwav">↓ WAV</button>
+    <button class="btn" id="expmidi">↓ MIDI</button>
+    <button class="btn" id="expjson">↓ JSON</button>
+    <button class="btn" id="impjson">↑ Carica JSON</button>
+    <input type="file" id="file" accept=".json" style="display:none">
+    <span class="spacer"></span>
+    <span class="chip" id="savestate">—</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Drum machine
+    <span class="brush" id="brush"></span>
+    <span class="chip">trascina per dipingere · il menù accanto al nome è la suddivisione</span>
+  </h2>
+  <div class="gridwrap">
+    <div class="playhead" id="playhead"></div>
+    <div class="grid" id="drumgrid"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Strumenti melodici</h2>
+  <div class="tabs" id="meltabs"></div>
+  <div class="row" id="melopts" style="margin:0 0 9px;border:0;padding:0"></div>
+  <div class="gridwrap"><div class="grid ngrid" id="notegrid"></div></div>
+  <p class="hint" id="melhint"></p>
+</div>
+
+<div class="panel"><h2>Mixer</h2><div class="cols" id="mixer"></div></div>
+<div class="panel"><h2>Effetti master</h2><div class="cols" id="fx"></div></div>
+</div>
+<div id="toast"><span id="toasttx"></span><button class="btn sm" id="toastbtn" style="display:none"></button></div>
+
+<script type="module" src="js/ui.js"></script>
+<script>
+if('serviceWorker' in navigator && location.protocol==='https:'){
+  addEventListener('load', ()=>navigator.serviceWorker.register('sw.js'));
+}
+</script>
+</body>
+</html>
