@@ -1,5 +1,5 @@
 /* BeatLab — stato del progetto, undo/redo, autosave, formato beatlab/2 */
-import { TRACKS, DRUMS, MELS, SCALES, NOTE_NAMES, clamp } from './engine.js';
+import { TRACKS, DRUMS, MELS, SCALES, NOTE_NAMES, clamp, suggestLight } from './engine.js';
 import { $ } from './dom.js';
 
 export const DIVS=[8,12,16,24];
@@ -21,10 +21,12 @@ export const proj = {
   cur:0, chain:'AABA', song:false, seed:0,
   mix:Object.fromEntries(TRACKS.map(t=>[t.id,{g:0.85,pan:0,mute:false,solo:false}])),
   fx:{bits:13, srDiv:1, drive:1.6, revS:0.85, revL:0.85, duck:3.5, bassDuck:0.45, master:0.9},
-  leadWave:'sawtooth', gtrPm:true
+  leadWave:'sawtooth', gtrPm:true,
+  /* modo leggero: acceso da solo su telefoni e macchine modeste */
+  light: suggestLight()
 };
 proj.mix.kick.g=1.0; proj.mix.bass.g=0.95; proj.mix.laun.g=0.8;
-proj.mix.tumb.g=0.75; proj.mix.ten.g=0.6; proj.mix.guitar.g=0.7;
+proj.mix.tumb.g=0.95; proj.mix.ten.g=0.6; proj.mix.guitar.g=0.7;
 proj.mix.tumb.pan=-0.35; proj.mix.hhc.pan=0.18; proj.mix.rim.pan=-0.25;
 
 /* la UI registra qui il proprio refresh, così evitiamo import circolari */
@@ -116,7 +118,7 @@ export function toJSON(full=false){
         sidechainDb:proj.fx.duck, bassDuck:proj.fx.bassDuck, master:proj.fx.master},
     synth:{leadWave:proj.leadWave, guitarPalmMute:proj.gtrPm}
   };
-  if(full) j.ui={cur:proj.cur, song:proj.song, chain:proj.chain};
+  if(full) j.ui={cur:proj.cur, song:proj.song, chain:proj.chain, light:proj.light};
   return j;
 }
 export function fromJSON(j){
@@ -149,5 +151,6 @@ export function fromJSON(j){
     proj.fx.revS=f.reverbShort??0.85; proj.fx.revL=f.reverbLong??0.85;
     proj.fx.duck=f.sidechainDb??3.5; proj.fx.bassDuck=f.bassDuck??0.45; proj.fx.master=f.master??0.9; }
   if(j.synth){ proj.leadWave=j.synth.leadWave||'sawtooth'; proj.gtrPm=j.synth.guitarPalmMute!==false; }
-  if(j.ui){ proj.cur=clamp(j.ui.cur|0,0,3); proj.song=!!j.ui.song; }
+  if(j.ui){ proj.cur=clamp(j.ui.cur|0,0,3); proj.song=!!j.ui.song;
+            if(typeof j.ui.light==='boolean') proj.light=j.ui.light; }
 }

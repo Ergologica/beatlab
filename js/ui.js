@@ -3,7 +3,7 @@ import { NOTE_NAMES, DRUMS, MELS, TID, clamp } from './engine.js';
 import { proj, P, DIVS, emptyPattern, divOf, scaleRows, barDur, audible,
          pushUndo, undo, redo, histSizes, markDirty, clearDirty,
          loadAutosave, dropAutosave, toJSON, fromJSON, hooks } from './state.js';
-import { isPlaying, getA, getQueued, play, stop, applyMix,
+import { isPlaying, getA, getQueued, play, stop, applyMix, resetAudio, outLatency,
          setCrush, setDrive, setSrDiv, renderBuffer } from './audio.js';
 import { generate, variation } from './generator.js';
 import { encodeWav, ensureLame, encodeMp3, midiBlob, fileStem, download } from './exporters.js';
@@ -58,7 +58,7 @@ function buildDrumGrid(){
     }
     row.append(lab,cells); g.appendChild(row);
   }
-  const ph=$('playhead'); ph.innerHTML='';
+  const ph=$('playhead'); ph.innerHTML=''; lastStep=-2;
   for(let i=0;i<p.bars*16;i++){ const d=document.createElement('div');
     d.className='ph'; d.style.width=cellW(16)+'px'; ph.appendChild(d); }
 }
@@ -270,27 +270,43 @@ function refresh(){
 }
 hooks.refresh = refresh;
 
-/* ---------- playhead ---------- */
+/* ---------- playhead ----------
+   si ridisegna solo quando il passo cambia: toccare centinaia di celle a ogni
+   fotogramma ruba tempo al thread principale, e sui telefoni si sente */
+let lastStep=-2, lastSlot=-2;
 function drawPlayhead(step){
+  if(step===lastStep) return;
   const ph=$('playhead').children;
-  for(let i=0;i<ph.length;i++) ph[i].classList.toggle('a', i===step);
+  if(lastStep>=0 && ph[lastStep]) ph[lastStep].classList.remove('a');
+  if(step>=0 && ph[step]) ph[step].classList.add('a');
+  lastStep=step;
 }
 function raf(){
   requestAnimationFrame(raf);
   const a=getA();
   if(!isPlaying()||!a){ return; }
-  const now=a.ctx.currentTime, bd=barDur(), qp=getQueued();
+  /* l'uscita audio ha una sua latenza: senza compensarla la testina va avanti */
+  const now=a.ctx.currentTime - outLatency(), bd=barDur(), qp=getQueued();
   while(qp.length>1 && qp[0].t0 + qp[0].bars*bd < now) qp.shift();
   const q=qp.find(x=> now>=x.t0 && now < x.t0+x.bars*bd);
   if(!q){ drawPlayhead(-1); return; }
   drawPlayhead(q.pi===proj.cur ? Math.floor((now-q.t0)/(bd/16)) : -1);
-  const slots=$('slots').children;
-  for(let i=0;i<slots.length;i++) slots[i].classList.toggle('playing', i===q.pi);
+  if(q.pi!==lastSlot){
+    const slots=$('slots').children;
+    for(let i=0;i<slots.length;i++) slots[i].classList.toggle('playing', i===q.pi);
+    lastSlot=q.pi;
+  }
 }
 raf();
 
 /* ---------- avvio ---------- */
+function syncLight(){
+  const b=$('lightmode');
+  b.classList.toggle('on', proj.light);
+  b.textContent = proj.light ? 'Modo leggero: ON' : 'Modo leggero: off';
+}
 function syncControls(){
+  syncLight();
   $('bpm').value=proj.bpm; $('swing').value=proj.swing;
   $('humt').value=proj.hum.t; $('humv').value=proj.hum.v;
   $('root').value=proj.root; $('scale').value=proj.scale; $('chain').value=proj.chain;
@@ -338,6 +354,12 @@ function syncControls(){
   $('clear').onclick=()=>{ pushUndo(); proj.patterns[proj.cur]=emptyPattern(P().bars); refresh(); };
   $('copy').onclick=()=>{ pushUndo(); const n=(proj.cur+1)%4;
     proj.patterns[n]=JSON.parse(JSON.stringify(P())); proj.cur=n; refresh(); };
+  $('lightmode').onclick=()=>{
+    proj.light=!proj.light; syncLight(); markDirty();
+    resetAudio();          // il grafo va ricostruito: cambiano riverberi e voci
+    toast(proj.light ? 'Modo leggero acceso: meno oscillatori, riverberi più semplici.'
+                     : 'Modo pieno: tutte le voci e i riverberi a convoluzione.');
+  };
   $('undo').onclick=()=>{ if(!undo()) toast('Niente da annullare'); };
   $('redo').onclick=()=>{ if(!redo()) toast('Niente da rifare'); };
 

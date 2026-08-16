@@ -1,20 +1,46 @@
-/* BeatLab — runtime audio: playback live e render offline */
+/* BeatLab — runtime audio: playback live e render offline.
+
+   L'orologio dello scheduler vive in un Web Worker: i timer della pagina
+   vengono rallentati dai browser quando la scheda perde il fuoco (sui telefoni
+   in modo aggressivo), e un timer in ritardo significa audio a buchi. */
 import { TRACKS, DRUMS, MELS, clamp, mulberry32, buildGraph, makeLaun, makeDrone,
-         fireDrum, fireNote, duckAt, crushCurve, shaper } from './engine.js';
+         fireDrum, fireNote, duckAt, crushCurve, shaper, routeDecim,
+         setLight, isLight, suggestLight } from './engine.js';
 import { proj, divOf, audible, chainList, barDur, stepDur, stepTime } from './state.js';
 import { $ } from './dom.js';
 
-let A=null, playing=false, timer=null, booting=false;
+let A=null, playing=false, booting=false;
 let chainIdx=0, queuedUntil=0, queuedPatterns=[], playRng=mulberry32(1);
 let schedState={openHat:null};
 
 export const isPlaying = () => playing;
 export const getA = () => A;
 export const getQueued = () => queuedPatterns;
+export const outLatency = () => A ? (A.ctx.outputLatency || A.ctx.baseLatency || 0) : 0;
+
+/* ---------- orologio: worker, con i timer della pagina come ripiego ---------- */
+const CLOCK_SRC = `let id=null;onmessage=e=>{if(e.data==='start'){if(!id)id=setInterval(()=>postMessage(0),50)}else{clearInterval(id);id=null}};`;
+let clockWorker=null, clockTimer=null;
+function startClock(fn){
+  stopClock();
+  if(!clockWorker){
+    try{ clockWorker=new Worker(URL.createObjectURL(new Blob([CLOCK_SRC],{type:'application/javascript'}))); }
+    catch(e){ clockWorker=null; }
+  }
+  if(clockWorker){ clockWorker.onmessage=fn; clockWorker.postMessage('start'); }
+  else { const loop=()=>{ fn(); clockTimer=setTimeout(loop,50); }; loop(); }
+}
+function stopClock(){
+  if(clockWorker) clockWorker.postMessage('stop');
+  if(clockTimer){ clearTimeout(clockTimer); clockTimer=null; }
+}
 
 export function setCrush(N,bits){ N.crush.curve = crushCurve(N.ctx,bits).curve; }
 export function setDrive(N,amt){ N.drive.curve = shaper(N.ctx,amt,0.15).curve; }
-export function setSrDiv(N,d){ if(N.decim) N.decim.parameters.get('div').value=d; }
+export function setSrDiv(N,d){
+  routeDecim(N, d>1);
+  if(N.decim) N.decim.parameters.get('div').value=Math.max(d,1);
+}
 
 export function applyMix(N){
   for(const t of TRACKS){
@@ -30,23 +56,33 @@ export function applyMix(N){
 
 async function initAudio(){
   if(A) return A;
-  const ctx = new (window.AudioContext||window.webkitAudioContext)();
+  setLight(proj.light);
+  /* un buffer più generoso: meglio 120 ms di latenza che un audio a scatti */
+  let ctx;
+  try{ ctx = new (window.AudioContext||window.webkitAudioContext)({latencyHint: proj.light?0.2:0.05}); }
+  catch(e){ ctx = new (window.AudioContext||window.webkitAudioContext)(); }
   const N = await buildGraph(ctx, ctx.destination);
-  N.persist.laun = makeLaun(ctx,N);
-  N.persist.drone = makeDrone(ctx,N, 60+proj.root-24);
   applyMix(N);
   A={ctx,N};
   const dot=$('dot'), st=$('statustx');
   if(dot) dot.classList.add('live');
   if(st) st.textContent = 'audio attivo · '+Math.round(ctx.sampleRate/1000)+' kHz'
-    +(N.decim?'':' · decimatore non disponibile');
+    + (isLight()?' · modo leggero':'');
   return A;
+}
+/* il grafo va ricostruito quando cambia il modo leggero */
+export function resetAudio(){
+  const wasPlaying = playing;
+  stop();
+  setTimeout(()=>{ if(wasPlaying) play(); }, 400);
 }
 
 /* programma un pattern intero a partire da t0 */
 function schedulePattern(ctx,N,pi,t0,st,rng){
   const p=proj.patterns[pi];
   const hT=proj.hum.t/100, hV=proj.hum.v/100;
+  /* anche il bordone nasce alla prima richiesta */
+  if(p.drone && !N.persist.drone) N.persist.drone = makeDrone(ctx,N, 60+proj.root-24);
   if(N.persist.drone){
     N.persist.drone.setNote(t0, 60+proj.root-24);
     N.persist.drone.set(t0, p.drone, 1);
@@ -88,13 +124,15 @@ export async function play(){
     if(ctx.state==='suspended') await ctx.resume();
     playing=true; chainIdx=0; schedState={openHat:null};
     playRng=mulberry32((proj.seed||1)+7);
-    queuedUntil = ctx.currentTime+0.14; queuedPatterns=[];
+    queuedUntil = ctx.currentTime+0.18; queuedPatterns=[];
     tick();
+    startClock(tick);
   } finally { booting=false; }
 }
+/* orizzonte largo: se la scheda viene rallentata, c'è margine prima del buco */
 function tick(){
   if(!playing||!A) return;
-  const {ctx,N}=A, horizon=ctx.currentTime+1.2;
+  const {ctx,N}=A, horizon=ctx.currentTime+2.0;
   let guard=0;
   while(queuedUntil < horizon && guard++<32){
     const list = proj.song ? chainList() : [proj.cur];
@@ -104,10 +142,9 @@ function tick(){
     queuedUntil = schedulePattern(ctx,N,pi,t0,schedState,playRng);
     chainIdx++;
   }
-  timer=setTimeout(tick,60);
 }
 export function stop(){
-  playing=false; if(timer) clearTimeout(timer);
+  playing=false; stopClock();
   if(A){ const {ctx,N}=A, t=ctx.currentTime;
     if(N.persist.laun) N.persist.laun.stop(t);
     if(N.persist.drone) N.persist.drone.set(t,false,1);
@@ -120,8 +157,16 @@ export function stop(){
   queuedPatterns=[];
 }
 
-/* render offline: stesso scheduler, contesto OfflineAudioContext */
+/* Render offline: stesso scheduler, contesto OfflineAudioContext.
+   Qui il tempo reale non conta, quindi si esporta sempre a qualità piena —
+   anche se si sta suonando in modo leggero su un telefono. */
 export async function renderBuffer(reps=1){
+  const wasLight = isLight();
+  setLight(false);
+  try { return await renderInner(reps); }
+  finally { setLight(wasLight); }
+}
+async function renderInner(reps){
   const sr=44100;
   const one = proj.song ? chainList() : [proj.cur];
   const list=[]; for(let r=0;r<reps;r++) list.push(...one);
@@ -129,13 +174,11 @@ export async function renderBuffer(reps=1){
   const dur = bars*barDur() + 2.6;
   const ctx = new OfflineAudioContext(2, Math.ceil(sr*dur), sr);
   const N = await buildGraph(ctx, ctx.destination);
-  N.persist.laun = makeLaun(ctx,N);
-  N.persist.drone = makeDrone(ctx,N, 60+proj.root-24);
   applyMix(N);
   const st={openHat:null}, rng=mulberry32((proj.seed||1)+7);
   let t=0.05;
   for(const pi of list) t = schedulePattern(ctx,N,pi,t,st,rng);
-  N.persist.laun.stop(t);
-  N.persist.drone.set(t,false,1);
+  if(N.persist.laun) N.persist.laun.stop(t);
+  if(N.persist.drone) N.persist.drone.set(t,false,1);
   return await ctx.startRendering();
 }
