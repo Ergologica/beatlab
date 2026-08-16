@@ -36,6 +36,27 @@ anche offline.
 - **Export**: MP3, WAV, **MIDI** (tipo 1, 480 PPQ, batteria General MIDI sul
   canale 10 — aprilo nel tuo DAW), JSON. Undo/redo a 60 passi e salvataggio
   automatico nel browser.
+- **Modo leggero**, acceso da solo su telefoni e macchine modeste: voci con
+  meno oscillatori e riverberi a rete di ritardi invece che a convoluzione.
+  L'interruttore è in alto a destra. L'export resta sempre a qualità piena.
+
+## Prestazioni
+
+Il motore riusa le voci invece di crearle a ogni colpo: gli oscillatori di
+cassa, rullante, hi-hat, tumbarinu, basso e chitarra restano accesi e ogni nota
+riprogramma solo inviluppi e frequenze. Le catene fisse — cabinet, formanti,
+filtri — sono costruite una volta e condivise. Lo scheduler batte in un Web
+Worker, così i timer rallentati dal browser non aprono buchi nell'audio.
+
+Misurato su un render offline di un pattern fitto (batteria a sedicesimi,
+tumbarinu in 12/8, chitarra a ottavi, bordone):
+
+| | prima | ora |
+|---|---|---|
+| modo pieno | 0,7× tempo reale | **6,2×** |
+| modo leggero | — | **11,4×** |
+
+Sotto 1× il telefono non sta dietro: era quello il problema.
 
 ## Il motore Python
 
