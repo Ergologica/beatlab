@@ -1,0 +1,67 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installa Playwright con Chromium
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Avvia un server sul progetto
+        run: |
+          python3 -m http.server 8000 >/dev/null 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:8000/ && break
+            sleep 0.5
+          done
+
+      - name: Esegui la suite
+        run: node tests/run.js http://localhost:8000
+
+  renderer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Installa numpy e scipy
+        run: pip install numpy scipy
+
+      - name: Renderizza il pattern di esempio
+        run: |
+          python3 py/beatlab_render.py examples/demo-pattern.json -o /tmp/beat.wav --chain A
+          python3 py/beatlab_render.py examples/demo-pattern.json --midi-only --midi /tmp/beat.mid
+
+      - name: Controlla che l'audio sia sano
+        run: |
+          python3 - <<'EOF'
+          import wave, numpy as np, sys
+          w = wave.open('/tmp/beat.wav')
+          x = np.frombuffer(w.readframes(w.getnframes()), '<i2').astype(float) / 32768
+          peak, rms = np.max(np.abs(x)), np.sqrt((x**2).mean())
+          print(f'picco {peak:.3f}  rms {20*np.log10(rms+1e-12):.1f} dBFS  {w.getnframes()/w.getframerate():.1f}s')
+          assert peak <= 1.0, 'saturazione'
+          assert rms > 0.01, 'silenzio'
+          assert w.getnframes() / w.getframerate() > 1, 'troppo corto'
+          head = open('/tmp/beat.mid','rb').read(4)
+          assert head == b'MThd', 'MIDI non valido'
+          print('ok')
+          EOF
