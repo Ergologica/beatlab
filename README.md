@@ -11,6 +11,13 @@ anche offline.
 
 ![BeatLab](docs/schermata.png)
 
+Sul telefono l'interfaccia si riorganizza in cinque schede — Ritmo, Melodia,
+Mix, Brano, Esporta — con il trasporto sempre fermo in alto e la navigazione
+nella zona del pollice. La colonna dei nomi resta ferma mentre la griglia
+scorre di lato, e le celle crescono per stare comode sotto il dito.
+
+<img src="docs/schermata-telefono.png" alt="BeatLab su telefono" width="300">
+
 ## Cosa fa
 
 - **Drum machine** a 8 tracce — cassa, rullante, clap, due hi-hat (il chiuso

@@ -7,7 +7,7 @@
  * file://) e Playwright con Chromium. Esce con codice 1 se qualcosa fallisce,
  * così la CI se ne accorge.
  */
-const { chromium } = require('playwright');
+const { chromium, devices } = require('playwright');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -270,6 +270,54 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 
   console.log('\nerrori di pagina');
   ok('nessun errore in console', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  // ---------------------------------------------------------------- telefono
+  console.log('\nlayout su telefono');
+  const mob = await browser.newContext({ ...devices['iPhone 14'] });
+  const mp = await mob.newPage();
+  const mobErrors = [];
+  mp.on('pageerror', e => mobErrors.push(e.message));
+  await mp.goto(BASE + '/');
+  await mp.waitForTimeout(800);
+  const layout = await mp.evaluate(() => {
+    const vis = el => el && getComputedStyle(el).display !== 'none';
+    const tb = document.getElementById('tabbar');
+    const btns = [...tb.querySelectorAll('button')];
+    const secs = [...document.querySelectorAll('main>section')]
+      .filter(s => getComputedStyle(s).display !== 'none');
+    const cell = document.querySelector('#drumgrid .cell');
+    const lab = document.querySelector('#drumgrid .glabel');
+    const r = cell.getBoundingClientRect(), tr = tb.getBoundingClientRect();
+    return {
+      tabbar: vis(tb), tab: btns.length,
+      tabMinH: Math.min(...btns.map(b => b.getBoundingClientRect().height)),
+      sezioni: secs.length,
+      cella: Math.min(r.width, r.height),
+      nomiFissi: getComputedStyle(lab).position === 'sticky',
+      barraInFondo: Math.abs(tr.bottom - innerHeight) < 2,
+      scrollOrizzontale: document.documentElement.scrollWidth > innerWidth + 1,
+    };
+  });
+  ok('barra di navigazione presente', layout.tabbar);
+  ok('cinque destinazioni, non di più', layout.tab === 5, 'trovate ' + layout.tab);
+  ok('bersagli di almeno 44 px', layout.tabMinH >= 44, layout.tabMinH + ' px');
+  ok('una sola sezione alla volta', layout.sezioni === 1, layout.sezioni + ' visibili');
+  ok('celle comode al tocco', layout.cella >= 30, layout.cella.toFixed(0) + ' px');
+  ok('la colonna dei nomi resta ferma', layout.nomiFissi);
+  ok('la barra tocca il fondo dello schermo', layout.barraInFondo);
+  ok('la pagina non scorre in orizzontale', !layout.scrollOrizzontale);
+
+  const nav = await mp.evaluate(() => {
+    document.querySelector('#tabbar button[data-sec=mix]').click();
+    const on = [...document.querySelectorAll('main>section')]
+      .filter(s => getComputedStyle(s).display !== 'none').map(s => s.dataset.sec);
+    const mixer = document.querySelectorAll('#mixer .ctl').length;
+    return { on, mixer };
+  });
+  ok('la navigazione cambia sezione', nav.on.length === 1 && nav.on[0] === 'mix', nav.on.join(','));
+  ok('il mixer è raggiungibile dal telefono', nav.mixer === 13);
+  ok('nessun errore su telefono', mobErrors.length === 0, mobErrors.slice(0, 2).join(' | '));
+  await mob.close();
 
   fs.rmSync(tmp, { recursive: true, force: true });
   await browser.close();

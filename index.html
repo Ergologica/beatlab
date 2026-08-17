@@ -87,7 +87,7 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;
 .cell.on{background:var(--on);border-color:var(--acc)}
 .cell.on.acc{background:var(--acc);box-shadow:inset 0 0 0 1px #fff6}
 .cell.on.gh{background:var(--ghost)}
-.playhead{height:4px;display:flex;margin:0 0 6px 158px}
+.playhead{height:4px;display:flex;margin:0 0 6px}
 .ph{height:4px;border-radius:2px;background:#1a1f26;margin-right:2px;flex:0 0 auto}
 .ph.a{background:var(--teal)}
 
@@ -109,7 +109,7 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;
   cursor:pointer;font-size:12px;color:var(--tx2)}
 .tab.sel{background:var(--teal);color:#04211d;border-color:var(--teal);font-weight:650}
 
-.brush{display:flex;gap:4px;align-items:center}
+.brush{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .bb{padding:4px 10px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);
   cursor:pointer;font-size:11.5px;color:var(--tx2);display:flex;align-items:center;gap:5px}
 .bb .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -132,10 +132,83 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3)
   box-shadow:0 8px 28px #000a;opacity:0;transition:.25s;pointer-events:none;z-index:50;
   display:flex;gap:12px;align-items:center;max-width:90vw}
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
-@media (max-width:760px){
-  .glabel{width:118px;flex:0 0 118px}
-  .playhead{margin-left:118px}
-  .wrap{padding:10px 10px 70px}
+
+/* ============================================================
+   Schermi stretti: una sezione alla volta, navigazione in basso.
+   Su computer resta tutto in colonna, come prima.
+   ============================================================ */
+main>section{display:block}
+#tabbar{display:none}
+.hide-sm{display:inline-block}
+
+/* la colonna dei nomi non deve scorrere via con le celle */
+.glabel{position:sticky;left:0;z-index:3;background:var(--panel)}
+.ngrid .glabel{background:var(--panel)}
+.phspacer{position:sticky;left:0;z-index:3;background:var(--panel);flex:0 0 158px;height:4px}
+.gridwrap{overscroll-behavior-x:contain}
+button,.tab,.bb,.slot,.mini{touch-action:manipulation}
+
+@media (max-width:900px){
+  html,body{overscroll-behavior-y:none}
+  .wrap{padding:8px 10px calc(72px + env(safe-area-inset-bottom))}
+  header{margin-bottom:8px;gap:8px}
+  h1{font-size:16px}
+  .sub{display:none}
+  .hide-sm{display:none}
+
+  /* trasporto incollato in alto: play, BPM e pattern sempre raggiungibili */
+  .transport{position:sticky;top:0;z-index:30;margin:0 -10px 10px;border-radius:0;
+    border-left:0;border-right:0;padding:8px 10px;
+    background:rgba(20,24,30,.94);backdrop-filter:blur(10px)}
+  .transport .btn{padding:9px 14px}
+  .transport .slot{width:38px;height:36px}
+
+  main>section{display:none}
+  main>section.on{display:block}
+  .panel{padding:10px}
+
+  /* bersagli più larghi: sotto i 44 px il dito sbaglia */
+  .cell{height:32px}
+  .ngrid .cell{height:26px}
+  .grow{height:36px}
+  .ngrid .grow{height:28px}
+  .glabel{width:112px;flex:0 0 112px;font-size:11.5px}
+  .glabel select{width:36px}
+  /* mute e solo vivono già nella scheda Mix: qui lo spazio serve al nome */
+  .glabel .mini{display:none}
+  /* i nomi delle note sono corti: lì lo spazio va alla griglia */
+  .ngrid .glabel{width:56px;flex:0 0 56px}
+  .phspacer{flex:0 0 112px}
+  .transport .field label{display:none}
+  .transport .row{gap:8px;align-items:center}
+  .btn{padding:9px 13px}
+  .bb{padding:8px 12px}
+  .tab{padding:8px 13px}
+  .field select,.field input[type=number],.field input[type=text]{padding:8px;font-size:16px}
+  input[type=range]{height:6px;margin:12px 0}
+  input[type=range]::-webkit-slider-thumb{width:20px;height:20px}
+  .cols{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  #toast{bottom:calc(72px + env(safe-area-inset-bottom))}
+
+  #tabbar{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:rgba(18,22,27,.96);backdrop-filter:blur(12px);
+    border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  #tabbar button{
+    flex:1;min-height:56px;background:none;border:0;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    color:var(--tx3);font-size:10.5px;letter-spacing:.02em;padding:6px 2px;
+  }
+  #tabbar button i{font-style:normal;font-size:19px;line-height:1}
+  #tabbar button.on{color:var(--amber)}
+  #tabbar button.on i{filter:drop-shadow(0 0 6px rgba(232,163,61,.45))}
+}
+@media (max-width:420px){
+  .glabel{width:96px;flex:0 0 96px}
+  .phspacer{flex:0 0 96px}
+  #tabbar button{font-size:9.5px}
 }
 </style>
 </head>
@@ -149,94 +222,124 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3)
   <span id="status"><span class="dot" id="dot"></span><span id="statustx">audio non avviato</span></span>
 </header>
 
-<div class="panel">
+<!-- trasporto: sempre a portata, su telefono resta incollato in alto -->
+<div class="panel transport" id="transport">
   <div class="row">
     <button class="btn primary" id="play">▶ Play</button>
     <button class="btn" id="stop">■ Stop</button>
     <div class="field"><label>BPM</label><input type="number" id="bpm" min="40" max="240" value="100" style="width:70px"></div>
-    <div class="field"><label>Swing</label><input type="range" id="swing" min="0" max="60" value="14" style="width:80px"></div>
-    <div class="field"><label>Umanizza tempo</label><input type="range" id="humt" min="0" max="100" value="35" style="width:80px"></div>
-    <div class="field"><label>Umanizza dinamica</label><input type="range" id="humv" min="0" max="100" value="30" style="width:80px"></div>
-    <div class="field"><label>Tonica</label><select id="root"></select></div>
-    <div class="field"><label>Modo</label>
-      <select id="scale">
-        <option value="dorian" selected>dorico</option>
-        <option value="minor">minore naturale</option>
-        <option value="phrygian">frigio</option>
-        <option value="minorpent">pentatonica min.</option>
-        <option value="major">maggiore</option>
-        <option value="harmminor">minore armonica</option>
-      </select></div>
-    <span class="spacer"></span>
     <div class="field"><label>Pattern</label><div class="slots" id="slots"></div></div>
-    <div class="field"><label>Battute (di questo)</label>
-      <select id="bars"><option>1</option><option selected>2</option><option>4</option><option>8</option></select></div>
-    <div class="field"><label>Catena (song)</label><input class="chain" id="chain" value="AABA"></div>
+    <span class="spacer"></span>
     <button class="btn" id="songmode">Song: off</button>
   </div>
+</div>
 
-  <div class="row">
-    <div class="field"><label>Stile</label>
-      <select id="style">
-        <option value="boombap">boom bap</option>
-        <option value="breakbeat" selected>breakbeat hiphop</option>
-        <option value="dbeat">d-beat hardcore</option>
-        <option value="ethno">ethno sardo</option>
-        <option value="trap">trap</option>
-      </select></div>
-    <button class="btn primary" id="gen">✦ Genera</button>
-    <div class="field"><label>Seed</label><input type="text" id="seed" value=""></div>
-    <button class="btn" id="regen" title="Rigenera identico con questo seed">↻ Rigenera</button>
-    <button class="btn" id="vary" title="Copia il pattern nello slot successivo e lo varia">≈ Variazione</button>
-    <button class="btn" id="genall">Genera A→D</button>
-    <span class="spacer"></span>
-    <button class="btn" id="undo" title="Ctrl+Z">↶ Annulla</button>
-    <button class="btn" id="redo" title="Ctrl+Shift+Z">↷ Rifai</button>
-    <button class="btn" id="copy">Copia in →</button>
-    <button class="btn" id="clear">Svuota</button>
+<main>
+<section data-sec="ritmo" class="on">
+  <div class="panel">
+    <h2>Drum machine
+      <span class="brush" id="brush"></span>
+      <span class="chip hide-sm">trascina per dipingere · il menù accanto al nome è la suddivisione</span>
+    </h2>
+    <div class="gridwrap">
+      <div class="playhead" id="playhead"></div>
+      <div class="grid" id="drumgrid"></div>
+    </div>
+  </div>
+</section>
+
+<section data-sec="melodia">
+  <div class="panel">
+    <h2>Strumenti melodici</h2>
+    <div class="tabs" id="meltabs"></div>
+    <div class="row" id="melopts" style="margin:0 0 9px;border:0;padding:0"></div>
+    <div class="gridwrap"><div class="grid ngrid" id="notegrid"></div></div>
+    <p class="hint" id="melhint"></p>
+  </div>
+</section>
+
+<section data-sec="mix">
+  <div class="panel"><h2>Mixer</h2><div class="cols" id="mixer"></div></div>
+  <div class="panel"><h2>Effetti master</h2><div class="cols" id="fx"></div></div>
+</section>
+
+<section data-sec="brano">
+  <div class="panel">
+    <h2>Genera</h2>
+    <div class="row">
+      <div class="field"><label>Stile</label>
+        <select id="style">
+          <option value="boombap">boom bap</option>
+          <option value="breakbeat" selected>breakbeat hiphop</option>
+          <option value="dbeat">d-beat hardcore</option>
+          <option value="ethno">ethno sardo</option>
+          <option value="trap">trap</option>
+        </select></div>
+      <button class="btn primary" id="gen">✦ Genera</button>
+      <div class="field"><label>Seed</label><input type="text" id="seed" value=""></div>
+      <button class="btn" id="regen" title="Rigenera identico con questo seed">↻ Rigenera</button>
+      <button class="btn" id="vary" title="Copia il pattern nello slot successivo e lo varia">≈ Variazione</button>
+      <button class="btn" id="genall">Genera A→D</button>
+      <span class="spacer"></span>
+      <button class="btn" id="undo" title="Ctrl+Z">↶ Annulla</button>
+      <button class="btn" id="redo" title="Ctrl+Shift+Z">↷ Rifai</button>
+      <button class="btn" id="copy">Copia in →</button>
+      <button class="btn" id="clear">Svuota</button>
+    </div>
   </div>
 
-  <div class="row">
-    <div class="field"><label>Durata export</label>
-      <select id="reps">
-        <option value="1">×1</option><option value="2" selected>×2</option>
-        <option value="4">×4</option><option value="8">×8</option><option value="16">×16</option>
-      </select></div>
-    <button class="btn primary" id="expmp3">↓ MP3</button>
-    <button class="btn" id="expwav">↓ WAV</button>
-    <button class="btn" id="expstems" title="Uno zip con un WAV per ogni traccia: i suoni di BeatLab pronti per il DAW">↓ Stem</button>
-    <button class="btn" id="expmidi">↓ MIDI</button>
-    <button class="btn" id="expjson">↓ JSON</button>
-    <button class="btn" id="impjson">↑ Carica JSON</button>
-    <button class="btn primary" id="share" title="Copia un link che contiene tutto il progetto">🔗 Condividi</button>
-    <input type="file" id="file" accept=".json" style="display:none">
-    <span class="spacer"></span>
-    <span class="chip" id="savestate">—</span>
+  <div class="panel">
+    <h2>Struttura e impostazioni</h2>
+    <div class="row">
+      <div class="field"><label>Battute (di questo)</label>
+        <select id="bars"><option>1</option><option selected>2</option><option>4</option><option>8</option></select></div>
+      <div class="field"><label>Catena (song)</label><input class="chain" id="chain" value="AABA"></div>
+      <div class="field"><label>Tonica</label><select id="root"></select></div>
+      <div class="field"><label>Modo</label>
+        <select id="scale">
+          <option value="dorian" selected>dorico</option>
+          <option value="minor">minore naturale</option>
+          <option value="phrygian">frigio</option>
+          <option value="minorpent">pentatonica min.</option>
+          <option value="major">maggiore</option>
+          <option value="harmminor">minore armonica</option>
+        </select></div>
+      <div class="field"><label>Swing</label><input type="range" id="swing" min="0" max="60" value="14" style="width:110px"></div>
+      <div class="field"><label>Umanizza tempo</label><input type="range" id="humt" min="0" max="100" value="35" style="width:110px"></div>
+      <div class="field"><label>Umanizza dinamica</label><input type="range" id="humv" min="0" max="100" value="30" style="width:110px"></div>
+    </div>
   </div>
-</div>
+</section>
 
-<div class="panel">
-  <h2>Drum machine
-    <span class="brush" id="brush"></span>
-    <span class="chip">trascina per dipingere · il menù accanto al nome è la suddivisione</span>
-  </h2>
-  <div class="gridwrap">
-    <div class="playhead" id="playhead"></div>
-    <div class="grid" id="drumgrid"></div>
+<section data-sec="esporta">
+  <div class="panel">
+    <h2>Esporta e condividi</h2>
+    <div class="row">
+      <div class="field"><label>Durata export</label>
+        <select id="reps">
+          <option value="1">×1</option><option value="2" selected>×2</option>
+          <option value="4">×4</option><option value="8">×8</option><option value="16">×16</option>
+        </select></div>
+      <button class="btn primary" id="share" title="Copia un link che contiene tutto il progetto">🔗 Condividi</button>
+      <button class="btn primary" id="expmp3">↓ MP3</button>
+      <button class="btn" id="expwav">↓ WAV</button>
+      <button class="btn" id="expstems" title="Uno zip con un WAV per ogni traccia: i suoni di BeatLab pronti per il DAW">↓ Stem</button>
+      <button class="btn" id="expmidi">↓ MIDI</button>
+      <button class="btn" id="expjson">↓ JSON</button>
+      <button class="btn" id="impjson">↑ Carica JSON</button>
+      <input type="file" id="file" accept=".json" style="display:none">
+      <span class="spacer"></span>
+      <span class="chip" id="savestate">—</span>
+    </div>
+    <p class="hint">Il link di condivisione contiene tutto il progetto: chi lo apre se lo
+      trova già caricato. Gli stem sono un WAV per traccia, pronti per il DAW.</p>
   </div>
+</section>
+</main>
 </div>
 
-<div class="panel">
-  <h2>Strumenti melodici</h2>
-  <div class="tabs" id="meltabs"></div>
-  <div class="row" id="melopts" style="margin:0 0 9px;border:0;padding:0"></div>
-  <div class="gridwrap"><div class="grid ngrid" id="notegrid"></div></div>
-  <p class="hint" id="melhint"></p>
-</div>
-
-<div class="panel"><h2>Mixer</h2><div class="cols" id="mixer"></div></div>
-<div class="panel"><h2>Effetti master</h2><div class="cols" id="fx"></div></div>
-</div>
+<!-- navigazione: solo su schermo stretto, nella zona del pollice -->
+<nav id="tabbar" aria-label="Sezioni"></nav>
 <div id="toast"><span id="toasttx"></span><button class="btn sm" id="toastbtn" style="display:none"></button></div>
 
 <script type="module" src="js/ui.js"></script>

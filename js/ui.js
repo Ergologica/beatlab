@@ -10,8 +10,12 @@ import { encodeWav, ensureLame, encodeMp3, midiBlob, makeZip, fileStem, download
 import { shareLink, loadFromHash, clearHash, copyLink } from './share.js';
 import { $, toast } from './dom.js';
 
-const BARW=416;                                  // larghezza di una battuta, in px
-const cellW = div => (BARW/div)-2;
+/* Larghezza di una battuta. Col dito le celle devono essere più larghe: sotto i
+   30 px circa si sbaglia bersaglio, e la griglia scorre comunque in orizzontale
+   con la colonna dei nomi che resta ferma. */
+const isNarrow = () => window.innerWidth <= 900;
+const barWidth = () => isNarrow() ? 544 : 416;
+const cellW = div => (barWidth()/div)-2;
 let melSel='bass';
 const BRUSHES={ hit:{nm:'Colpo',v:0.9,c:'var(--on)'}, acc:{nm:'Accento',v:1.25,c:'var(--acc)'},
   gh:{nm:'Ghost',v:0.42,c:'var(--ghost)'}, era:{nm:'Gomma',v:0,c:'#39424f'} };
@@ -36,7 +40,8 @@ function buildDrumGrid(){
     const d=divOf(p,t.id), n=p.bars*d, w=cellW(d);
     const row=document.createElement('div'); row.className='grow';
     const lab=document.createElement('div'); lab.className='glabel';
-    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=t.nm;
+    const nm=document.createElement('span'); nm.className='nm';
+    nm.textContent = isNarrow() ? (t.nmS||t.nm) : t.nm;   // sul telefono il nome è abbreviato
     const ds=document.createElement('select');
     ds.className = (d===12||d===24)?'tri':'';
     ds.title='suddivisione per battuta (12 e 24 = terzine)';
@@ -61,6 +66,7 @@ function buildDrumGrid(){
     row.append(lab,cells); g.appendChild(row);
   }
   const ph=$('playhead'); ph.innerHTML=''; lastStep=-2;
+  const sp=document.createElement('div'); sp.className='phspacer'; ph.appendChild(sp);
   for(let i=0;i<p.bars*16;i++){ const d=document.createElement('div');
     d.className='ph'; d.style.width=cellW(16)+'px'; ph.appendChild(d); }
 }
@@ -289,9 +295,9 @@ hooks.refresh = refresh;
 let lastStep=-2, lastSlot=-2;
 function drawPlayhead(step){
   if(step===lastStep) return;
-  const ph=$('playhead').children;
-  if(lastStep>=0 && ph[lastStep]) ph[lastStep].classList.remove('a');
-  if(step>=0 && ph[step]) ph[step].classList.add('a');
+  const ph=$('playhead').children;         // [0] è lo spaziatore fisso dei nomi
+  if(lastStep>=0 && ph[lastStep+1]) ph[lastStep+1].classList.remove('a');
+  if(step>=0 && ph[step+1]) ph[step+1].classList.add('a');
   lastStep=step;
 }
 function raf(){
@@ -311,6 +317,46 @@ function raf(){
   }
 }
 raf();
+
+/* ---------- sezioni ----------
+   Su schermo stretto se ne mostra una alla volta, con la barra in basso: cinque
+   destinazioni, etichette corte, bersagli alti 56 px nella zona del pollice.
+   Su computer le sezioni restano tutte visibili e la barra sparisce. */
+const SECTIONS = [
+  {id:'ritmo',   ic:'🥁', nm:'Ritmo'},
+  {id:'melodia', ic:'🎹', nm:'Melodia'},
+  {id:'mix',     ic:'🎚', nm:'Mix'},
+  {id:'brano',   ic:'✦',  nm:'Brano'},
+  {id:'esporta', ic:'↓',  nm:'Esporta'},
+];
+let curSec = 'ritmo';
+function showSection(id){
+  curSec = id;
+  for(const s of document.querySelectorAll('main>section'))
+    s.classList.toggle('on', s.dataset.sec===id);
+  for(const b of $('tabbar').children) b.classList.toggle('on', b.dataset.sec===id);
+  try{ localStorage.setItem('beatlab.sec', id); }catch(e){}
+  window.scrollTo({top:0});
+}
+function buildTabbar(){
+  const bar=$('tabbar'); bar.innerHTML='';
+  for(const s of SECTIONS){
+    const b=document.createElement('button');
+    b.dataset.sec=s.id;
+    b.innerHTML='<i>'+s.ic+'</i>'+s.nm;
+    b.setAttribute('aria-label', s.nm);
+    b.onclick=()=>showSection(s.id);
+    bar.appendChild(b);
+  }
+}
+/* cambiando larghezza cambiano le celle: le griglie vanno ricostruite */
+let lastNarrow=isNarrow(), resizeTimer=null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{
+    if(isNarrow()!==lastNarrow){ lastNarrow=isNarrow(); refresh(); }
+  }, 180);
+});
 
 /* ---------- avvio ---------- */
 function syncLight(){
@@ -428,6 +474,12 @@ function syncControls(){
         buildMixer(); buildFx(); toast('Caricato '+f.name); }
       catch(err){ toast('JSON non valido: '+err.message); } };
     r.readAsText(f); e.target.value=''; };
+
+  buildTabbar();
+  let sec='ritmo';
+  try{ const s=localStorage.getItem('beatlab.sec');
+       if(s && SECTIONS.some(x=>x.id===s)) sec=s; }catch(e){}
+  showSection(sec);
 
   document.addEventListener('keydown',e=>{
     const tag=e.target.tagName;
