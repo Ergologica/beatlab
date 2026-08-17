@@ -100,7 +100,7 @@ function schedulePattern(ctx,N,pi,t0,st,rng){
     const t = e.t + (rng()-0.5)*0.012*hT;
     const v = clamp(e.v*(1+(rng()-0.5)*0.34*hV), 0.05, 1.6);
     if(e.id==='kick') duckAt(N,t,proj.fx.duck,proj.fx.bassDuck);
-    if(audible(e.id)) fireDrum(ctx,N,e.id,t,v,st);
+    fireDrum(ctx,N,e.id,t,v,st,audible(e.id));
   }
   for(const tr of MELS){
     if(!audible(tr.id)) continue;
@@ -155,6 +155,26 @@ export function stop(){
       if(st) st.textContent='audio in pausa'; } },320);
   }
   queuedPatterns=[];
+}
+
+/* Audizione: far sentire subito quello che si disegna, anche a trasporto
+   fermo. Il click è già un gesto dell'utente, quindi il contesto audio può
+   nascere qui senza che il browser lo blocchi. */
+let previewBusy=false;
+export async function preview(id, opts={}){
+  if(previewBusy) return;
+  previewBusy=true;
+  try{
+    const {ctx,N}=await initAudio();
+    if(ctx.state==='suspended') await ctx.resume();
+    const t=ctx.currentTime+0.02, v=opts.v??0.9;
+    if(TID[id].type==='drum') fireDrum(ctx,N,id,t,v,{openHat:null});
+    else {
+      const par = id==='lead' ? {wave:proj.leadWave} : id==='guitar' ? {pm:proj.gtrPm} : {};
+      fireNote(ctx,N,id,t,opts.n??60,Math.min(opts.dur??0.35,1.2),v,par);
+    }
+  }catch(e){ /* l'audizione non è mai un errore che valga la pena mostrare */ }
+  finally{ setTimeout(()=>{previewBusy=false;}, 25); }
 }
 
 /* Stem: una passata di render per ogni traccia in solo. Il sidechain della

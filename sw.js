@@ -1,9 +1,12 @@
 /* BeatLab — service worker: la app funziona offline dopo la prima visita */
-const CACHE = 'beatlab-v1';
+/* Aggiungendo un modulo va aggiunto anche qui, e va alzata la versione della
+   cache: altrimenti la app continua a funzionare online e si rompe solo a chi
+   la apre senza rete — un guasto che non si vede mai in prova. */
+const CACHE = 'beatlab-v2';
 const ASSETS = [
   '.', 'index.html', 'manifest.webmanifest', 'lame.min.js',
   'js/engine.js', 'js/dom.js', 'js/state.js', 'js/audio.js',
-  'js/generator.js', 'js/exporters.js', 'js/ui.js',
+  'js/generator.js', 'js/exporters.js', 'js/share.js', 'js/ui.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-512-maskable.png'
 ];
 

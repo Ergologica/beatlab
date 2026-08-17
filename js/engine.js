@@ -75,14 +75,18 @@ function pulseWave(ctx, nH=26, tilt=1.0){
   return ctx[key]=ctx.createPeriodicWave(re,im,{disableNormalization:false});
 }
 
-/* le curve dei waveshaper costano 2048 tanh: calcolate una volta e riusate */
+/* Le curve dei waveshaper costano 2048 tanh: calcolate una volta e riusate.
+   Le tabelle hanno lunghezza DISPARI di proposito: così il campione centrale
+   corrisponde esattamente a un ingresso di zero, e il silenzio resta silenzio.
+   Con una tabella pari lo zero cade fra due campioni e ne esce una componente
+   continua costante — inudibile ma sempre presente, e mangia margine. */
 const CURVES = new Map();
 function shaperCurve(amount, asym){
   const k = amount+'|'+asym;
   let c = CURVES.get(k);
   if(!c){
-    const n=2048; c=new Float32Array(n);
-    for(let i=0;i<n;i++){ const x=i*2/n-1, xa=x+asym*x*x*0.4;
+    const n=2049; c=new Float32Array(n);
+    for(let i=0;i<n;i++){ const x=i*2/(n-1)-1, xa=x+asym*x*x*0.4;
       c[i]=Math.tanh(amount*xa)/Math.tanh(amount); }
     CURVES.set(k,c);
   }
@@ -95,8 +99,8 @@ export function shaper(ctx, amount, asym=0, over){
   return w;
 }
 export function crushCurve(ctx, bits){
-  const n=4096, c=new Float32Array(n), lv=Math.pow(2,bits-1);
-  for(let i=0;i<n;i++){ const x=i*2/n-1; c[i]=Math.round(x*lv)/lv; }
+  const n=4097, c=new Float32Array(n), lv=Math.pow(2,bits-1);
+  for(let i=0;i<n;i++){ const x=i*2/(n-1)-1; c[i]=Math.round(x*lv)/lv; }
   const w=ctx.createWaveShaper(); w.curve=c; return w;
 }
 function impulse(ctx, dur, decay, bright){
@@ -613,18 +617,25 @@ function vGuitar(ctx,N,t,midi,dur,v,par={}){
          g.exponentialRampToValueAtTime(0.0001,t+d+0.12); }
 }
 
-/* dispatch — st porta lo stato del choke fra un colpo e l'altro */
-export function fireDrum(ctx,N,id,t,v,st){
+/* dispatch — st porta lo stato del choke fra un colpo e l'altro.
+   `aud` dice se la traccia si sente: un hi-hat muto non suona, ma strozza
+   comunque l'aperto, esattamente come una cassa muta continua a comandare il
+   sidechain. Il mixer decide cosa si ascolta, non cosa succede. */
+export function fireDrum(ctx,N,id,t,v,st,aud=true){
   if(id==='hhc'||id==='hho'){
     if(st && st.openHat && t < st.openHat.end){
       const g=st.openHat.node.gain;
       try{ g.cancelAndHoldAtTime(t); }catch(e){ try{g.cancelScheduledValues(t);}catch(e2){} }
       g.exponentialRampToValueAtTime(0.0001, t+0.014);
+      g.setValueAtTime(0, t+0.015);
     }
+    if(st) st.openHat=null;
+    if(!aud) return;
     const node=vHat(ctx,N,t,v,id==='hho');
-    if(st) st.openHat = (id==='hho') ? {node, end:t+0.36} : null;
+    if(st && id==='hho') st.openHat={node, end:t+0.36};
     return;
   }
+  if(!aud) return;
   switch(id){
     case 'kick': vKick(ctx,N,t,v); break;
     case 'snare': vSnare(ctx,N,t,v); break;

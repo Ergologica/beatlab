@@ -9,7 +9,7 @@ Web Audio API.
 Si installa come app (menu del browser → *Installa BeatLab*) e da lì funziona
 anche offline.
 
-![icona](icons/icon-192.png)
+![BeatLab](docs/schermata.png)
 
 ## Cosa fa
 
@@ -36,6 +36,12 @@ anche offline.
 - **Export**: MP3, WAV, **MIDI** (tipo 1, 480 PPQ, batteria General MIDI sul
   canale 10 — aprilo nel tuo DAW), JSON. Undo/redo a 60 passi e salvataggio
   automatico nel browser.
+- **Condivisione con un link**: il tasto *Condividi* copia un indirizzo che
+  contiene l'intero progetto compresso nel frammento dell'URL. Chi lo apre se
+  lo trova già caricato e modificabile — nessun archivio da nessuna parte, e
+  il frammento non viaggia nemmeno verso il server.
+- **Audizione mentre disegni**: ogni colpo e ogni nota si sentono nel momento
+  in cui li metti, anche a trasporto fermo. Si spegne dal pennello *Ascolto*.
 - **Modo leggero**, acceso da solo su telefoni e macchine modeste: voci con
   meno oscillatori e riverberi a rete di ritardi invece che a convoluzione.
   L'interruttore è in alto a destra. L'export resta sempre a qualità piena.
@@ -101,9 +107,29 @@ python3 -m http.server 8000   # i moduli ES non si caricano da file://
 # → http://localhost:8000
 ```
 
-I file: `js/engine.js` (sintesi), `js/state.js` (progetto, undo, autosave),
-`js/audio.js` (scheduler e render offline), `js/generator.js`,
-`js/exporters.js` (WAV/MP3/MIDI), `js/ui.js`, `sw.js` (offline).
+I file: `js/engine.js` (sintesi e voci riutilizzabili), `js/state.js` (progetto,
+undo, autosave, formato), `js/audio.js` (scheduler, render offline, stem),
+`js/generator.js`, `js/exporters.js` (WAV/MP3/MIDI/zip), `js/share.js`
+(link condivisibili), `js/ui.js`, `sw.js` (offline).
+
+## Test
+
+```bash
+npm install --no-save playwright && npx playwright install chromium
+python3 -m http.server 8000 &
+node tests/run.js http://localhost:8000
+```
+
+Quarantatré verifiche su interfaccia, generatore, annullamento, terzine, audio,
+condivisione ed export. Girano da sole a ogni push
+([workflow](.github/workflows/test.yml)), insieme a un render di controllo del
+motore Python.
+
+Fra queste ce n'è una che vale le altre: **un pattern vuoto deve produrre
+silenzio digitale esatto**. È scritta così perché due difetti veri erano
+sfuggiti proprio lì — un LFO collegato a un guadagno sempre vivo, che faceva
+ronzare il tumbarinu a trasporto fermo, e una componente continua lasciata
+dalle tabelle dei waveshaper con un numero pari di punti.
 
 ## Licenze
 

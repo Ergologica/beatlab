@@ -4,9 +4,10 @@ import { proj, P, DIVS, emptyPattern, divOf, scaleRows, barDur, audible,
          pushUndo, undo, redo, histSizes, markDirty, clearDirty,
          loadAutosave, dropAutosave, toJSON, fromJSON, hooks } from './state.js';
 import { isPlaying, getA, getQueued, play, stop, applyMix, resetAudio, outLatency,
-         setCrush, setDrive, setSrDiv, renderBuffer, renderStems } from './audio.js';
+         setCrush, setDrive, setSrDiv, renderBuffer, renderStems, preview } from './audio.js';
 import { generate, variation } from './generator.js';
 import { encodeWav, ensureLame, encodeMp3, midiBlob, makeZip, fileStem, download } from './exporters.js';
+import { shareLink, loadFromHash, clearHash, copyLink } from './share.js';
 import { $, toast } from './dom.js';
 
 const BARW=416;                                  // larghezza di una battuta, in px
@@ -16,6 +17,7 @@ const BRUSHES={ hit:{nm:'Colpo',v:0.9,c:'var(--on)'}, acc:{nm:'Accento',v:1.25,c
   gh:{nm:'Ghost',v:0.42,c:'var(--ghost)'}, era:{nm:'Gomma',v:0,c:'#39424f'} };
 let brush='hit';
 let paint=null;
+let audioPreview=true;          // audizione mentre si disegna
 
 function velOf(e){
   if(e.shiftKey) return 1.25;
@@ -137,13 +139,18 @@ function applyPaint(c){
     const id=c.dataset.tr, i=+c.dataset.i;
     if(P().tr[id][i]===paint.v) return;
     P().tr[id][i]=paint.v; paintClass(c,paint.v);
+    if(paint.v>0 && audioPreview) preview(id,{v:paint.v});
   } else {
     const m=+c.dataset.n, i=+c.dataset.i;
     const changed = paint.del ? delNote(m,i) : addNote(m,i,paint.v);
-    if(changed){ buildNoteGrid(); buildTabs(); }
+    if(changed){
+      buildNoteGrid(); buildTabs();
+      if(!paint.del && audioPreview) preview(melSel,{n:m, v:paint.v, dur:stepDurSec()*1.5});
+    }
   }
   markDirty();
 }
+const stepDurSec = () => barDur()/16;
 document.addEventListener('pointerdown', onDown);
 document.addEventListener('pointermove', e=>{
   if(!paint) return;
@@ -163,6 +170,12 @@ function buildBrush(){
     d.onclick=()=>{ brush=k; buildBrush(); };
     b.appendChild(d);
   }
+  const ap=document.createElement('button');
+  ap.className='bb'+(audioPreview?' sel':'');
+  ap.title='Fa sentire il suono mentre disegni, anche a trasporto fermo';
+  ap.textContent = audioPreview ? '🔊 Ascolto' : '🔇 Ascolto';
+  ap.onclick=()=>{ audioPreview=!audioPreview; buildBrush(); };
+  b.appendChild(ap);
 }
 function buildTabs(){
   const tb=$('meltabs'); tb.innerHTML='';
@@ -433,14 +446,38 @@ function syncControls(){
     if(e.key==='r') { brush='era'; buildBrush(); }
   });
 
-  let restored=false;
-  const saved=loadAutosave();
-  if(saved){ try{ fromJSON(JSON.parse(saved)); restored=true; }catch(e){} }
-  if(!restored) generate('breakbeat',0);
-  syncControls(); buildBrush(); refresh(); buildMixer(); buildFx();
-  clearDirty();
-  $('savestate').textContent = restored? 'sessione ripristinata' : 'nuova sessione';
-  if(restored) toast('Ho ripristinato la sessione precedente.','Ricomincia da capo',()=>{
-    dropAutosave(); location.reload();
-  });
+  $('share').onclick=async()=>{
+    const b=$('share'); b.disabled=true; b.textContent='…';
+    try{
+      const url=await shareLink();
+      const ok=await copyLink(url);
+      const kb=(url.length/1024).toFixed(1);
+      if(ok) toast('Link copiato ('+kb+' kB). Contiene tutto il progetto: chi lo apre se lo trova già caricato.');
+      else { prompt('Copia il link:', url); }
+    }catch(err){ toast('Non riesco a creare il link: '+err.message); }
+    b.textContent='🔗 Condividi'; b.disabled=false;
+  };
+
+  /* un progetto nell'indirizzo ha la precedenza sulla sessione salvata */
+  (async ()=>{
+    let from=null;
+    if(await loadFromHash()) from='link';
+    else {
+      const saved=loadAutosave();
+      if(saved){ try{ fromJSON(JSON.parse(saved)); from='sessione'; }catch(e){} }
+    }
+    if(!from) generate('breakbeat',0);
+    syncControls(); buildBrush(); refresh(); buildMixer(); buildFx();
+    clearDirty();
+    $('savestate').textContent = from==='link' ? 'caricato dal link'
+                              : from==='sessione' ? 'sessione ripristinata' : 'nuova sessione';
+    if(from==='link'){
+      clearHash();
+      toast('Progetto caricato dal link. Modificalo pure: resta solo tuo finché non lo ricondividi.');
+    } else if(from==='sessione'){
+      toast('Ho ripristinato la sessione precedente.','Ricomincia da capo',()=>{
+        dropAutosave(); location.reload();
+      });
+    }
+  })();
 })();
