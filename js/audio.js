@@ -3,7 +3,7 @@
    L'orologio dello scheduler vive in un Web Worker: i timer della pagina
    vengono rallentati dai browser quando la scheda perde il fuoco (sui telefoni
    in modo aggressivo), e un timer in ritardo significa audio a buchi. */
-import { TRACKS, DRUMS, MELS, clamp, mulberry32, buildGraph, makeLaun, makeDrone,
+import { TRACKS, TID, DRUMS, MELS, clamp, mulberry32, buildGraph, makeLaun, makeDrone,
          fireDrum, fireNote, duckAt, crushCurve, shaper, routeDecim,
          setLight, isLight, suggestLight } from './engine.js';
 import { proj, divOf, audible, chainList, barDur, stepDur, stepTime } from './state.js';
@@ -155,6 +155,38 @@ export function stop(){
       if(st) st.textContent='audio in pausa'; } },320);
   }
   queuedPatterns=[];
+}
+
+/* Stem: una passata di render per ogni traccia in solo. Il sidechain della
+   cassa agisce anche sugli stem degli altri strumenti (l'evento parte pur con
+   la cassa muta), così la somma degli stem ricostruisce il mix. */
+export async function renderStems(reps=1, onProg){
+  const used=[...new Set(proj.song ? chainList() : [proj.cur])];
+  const hasContent = id => used.some(pi=>{
+    const a=proj.patterns[pi].tr[id];
+    return TID[id].type==='drum' ? a.some(x=>x>0) : a.length>0;
+  });
+  const ids = TRACKS.filter(t=>hasContent(t.id)).map(t=>t.id);
+  const hasDrone = used.some(pi=>proj.patterns[pi].drone);
+  const total = ids.length + (hasDrone?1:0);
+  const saved = JSON.parse(JSON.stringify(proj.mix));
+  const out=[];
+  try{
+    for(let k=0;k<ids.length;k++){
+      const id=ids[k];
+      if(onProg) onProg(TID[id].nm, k, total);
+      for(const t of TRACKS){ proj.mix[t.id].solo=(t.id===id); proj.mix[t.id].mute=false; }
+      out.push({id, nm:TID[id].nm, buf:await renderBuffer(reps)});
+    }
+    if(hasDrone){
+      if(onProg) onProg('Bordone', ids.length, total);
+      for(const t of TRACKS){ proj.mix[t.id].solo=false; proj.mix[t.id].mute=true; }
+      out.push({id:'drone', nm:'Bordone tumbu', buf:await renderBuffer(reps)});
+    }
+  } finally {
+    for(const t of TRACKS) Object.assign(proj.mix[t.id], saved[t.id]);
+  }
+  return out;
 }
 
 /* Render offline: stesso scheduler, contesto OfflineAudioContext.

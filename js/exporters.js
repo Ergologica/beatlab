@@ -109,6 +109,37 @@ export function midiBlob(reps=1){
   return new Blob([new Uint8Array(all)],{type:'audio/midi'});
 }
 
+/* ---------- zip senza compressione (formato "store"): basta per i WAV ---------- */
+function crc32(buf){
+  let t=crc32.t;
+  if(!t){ t=crc32.t=new Uint32Array(256);
+    for(let n=0;n<256;n++){ let c=n;
+      for(let k=0;k<8;k++) c = (c&1) ? 0xEDB88320 ^ (c>>>1) : c>>>1;
+      t[n]=c>>>0; } }
+  let c=0xFFFFFFFF;
+  for(let i=0;i<buf.length;i++) c = t[(c^buf[i])&0xFF] ^ (c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+export function makeZip(files){          // files: [{name, data:Uint8Array}]
+  const enc=new TextEncoder();
+  const parts=[], central=[]; let offset=0;
+  const u16=v=>[v&255,(v>>8)&255], u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  for(const f of files){
+    const nm=enc.encode(f.name), crc=crc32(f.data), sz=f.data.length;
+    const head=new Uint8Array([0x50,0x4B,3,4, ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+    parts.push(head, nm, f.data);
+    central.push(new Uint8Array([0x50,0x4B,1,2, ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length),
+      ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), nm);
+    offset += head.length + nm.length + sz;
+  }
+  let cdSize=0; for(const c of central) cdSize+=c.length;
+  const end=new Uint8Array([0x50,0x4B,5,6, ...u16(0), ...u16(0),
+    ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...parts, ...central, end], {type:'application/zip'});
+}
+
 export function fileStem(){
   const st=$('style');
   return 'beatlab-'+(st?st.value:'beat')+'-'+proj.bpm+'bpm-'+NOTE_NAMES[proj.root].toLowerCase();

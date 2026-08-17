@@ -775,6 +775,40 @@ def write_midi(spec, path, chain=None, repeat=1):
     return len(tracks)
 
 
+def render_sf2(spec, sf2, out, sr=48000, chain=None, repeat=1, bitrate='320k'):
+    """Suona il MIDI del progetto con un SoundFont via FluidSynth.
+
+    Non è il suono di BeatLab: è General MIDI di buona fattura, utile per
+    ascoltare l'arrangiamento con timbri "classici" o come base di confronto.
+    Banchi consigliati: GeneralUser GS, FluidR3_GM.
+    """
+    import shutil, subprocess, tempfile
+    fl = shutil.which('fluidsynth')
+    if not fl:
+        print("! fluidsynth non trovato: installalo con 'apt install fluidsynth' "
+              "o 'brew install fluid-synth'.", file=sys.stderr)
+        return False
+    if not os.path.exists(sf2):
+        print(f"! SoundFont non trovato: {sf2}", file=sys.stderr)
+        return False
+    with tempfile.TemporaryDirectory() as td:
+        mid = os.path.join(td, 'beat.mid')
+        write_midi(spec, mid, chain=chain, repeat=repeat)
+        wav = os.path.join(td, 'beat.wav')
+        r = subprocess.run([fl, '-ni', '-g', '0.5', '-r', str(sr),
+                            '-F', wav, sf2, mid],
+                           capture_output=True, text=True)
+        if r.returncode != 0 or not os.path.exists(wav):
+            print('! fluidsynth è fallito:', (r.stderr or '').strip()[:300], file=sys.stderr)
+            return False
+        ext = os.path.splitext(out)[1].lower()
+        if ext in ('.wav', ''):
+            shutil.copy(wav, out)
+        elif not convert(wav, out, bitrate):
+            shutil.copy(wav, os.path.splitext(out)[0] + '.wav')
+    return True
+
+
 def convert(src_wav, dst, bitrate='320k'):
     """converte il WAV in mp3/flac/ogg con ffmpeg (o lame per l'mp3)."""
     import shutil, subprocess, tempfile
@@ -816,6 +850,9 @@ def main():
     ap.add_argument('--midi', metavar='FILE.mid', default=None,
                     help='scrive anche un file MIDI (batteria su canale 10)')
     ap.add_argument('--midi-only', action='store_true', help='solo MIDI, niente audio')
+    ap.add_argument('--sf2', metavar='BANCO.sf2', default=None,
+                    help='suona il MIDI con questo SoundFont via FluidSynth '
+                         'invece di usare il motore di sintesi')
     a = ap.parse_args()
 
     with open(a.json) as f:
@@ -829,6 +866,15 @@ def main():
         print(f'✓ {mp}  —  {n} tracce, 480 PPQ')
         if a.midi_only:
             return
+
+    if a.sf2:
+        ok = render_sf2(spec, a.sf2, a.out, sr=a.sr, chain=a.chain,
+                        repeat=a.repeat, bitrate=a.bitrate)
+        if ok:
+            print(f'✓ {a.out}  —  suonato con {os.path.basename(a.sf2)} (General MIDI)')
+        else:
+            sys.exit(1)
+        return
 
     out, info = render(spec, sr=a.sr, chain=a.chain, repeat=a.repeat,
                        tail=a.tail, seed=a.seed, stems=a.stems)

@@ -72,7 +72,13 @@ python3 py/beatlab_render.py examples/demo-pattern.json -o beat.mp3
 python3 py/beatlab_render.py pattern.json -o beat.wav --sr 48000 --chain AABACD
 python3 py/beatlab_render.py pattern.json -o beat.flac --repeat 4 --stems
 python3 py/beatlab_render.py pattern.json --midi-only --midi beat.mid
+python3 py/beatlab_render.py pattern.json -o gm.mp3 --sf2 FluidR3_GM.sf2
 ```
+
+`--sf2` suona il MIDI del progetto con un SoundFont via FluidSynth
+(`apt install fluidsynth`): non è il suono di BeatLab ma General MIDI di buona
+fattura — utile per sentire l'arrangiamento con timbri classici. Banchi
+consigliati: GeneralUser GS, FluidR3_GM.
 
 L'estensione decide il formato (`.wav` nativo; `.mp3`/`.flac`/`.ogg` via
 ffmpeg). L'anteprima del browser e il render Python condividono i **dati**, non

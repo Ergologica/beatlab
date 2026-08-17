@@ -4,9 +4,9 @@ import { proj, P, DIVS, emptyPattern, divOf, scaleRows, barDur, audible,
          pushUndo, undo, redo, histSizes, markDirty, clearDirty,
          loadAutosave, dropAutosave, toJSON, fromJSON, hooks } from './state.js';
 import { isPlaying, getA, getQueued, play, stop, applyMix, resetAudio, outLatency,
-         setCrush, setDrive, setSrDiv, renderBuffer } from './audio.js';
+         setCrush, setDrive, setSrDiv, renderBuffer, renderStems } from './audio.js';
 import { generate, variation } from './generator.js';
-import { encodeWav, ensureLame, encodeMp3, midiBlob, fileStem, download } from './exporters.js';
+import { encodeWav, ensureLame, encodeMp3, midiBlob, makeZip, fileStem, download } from './exporters.js';
 import { $, toast } from './dom.js';
 
 const BARW=416;                                  // larghezza di una battuta, in px
@@ -387,6 +387,26 @@ function syncControls(){
       }
     } catch(err){ toast('Errore nel render: '+err.message); }
     b.textContent='↓ MP3'; b.disabled=false;
+  };
+  $('expstems').onclick=async()=>{
+    const b=$('expstems'); b.disabled=true;
+    try{
+      const stems=await renderStems(+$('reps').value,
+        (nm,k,tot)=>{ b.textContent='stem '+(k+1)+'/'+tot+' '+nm; });
+      if(!stems.length){ toast('Non c\'è niente da esportare: il pattern è vuoto.'); }
+      else{
+        b.textContent='zip…';
+        const files=[];
+        for(let i=0;i<stems.length;i++){
+          const wav=encodeWav(stems[i].buf);
+          const nm=String(i+1).padStart(2,'0')+'-'+stems[i].id+'.wav';
+          files.push({name:nm, data:new Uint8Array(await wav.arrayBuffer())});
+        }
+        download(makeZip(files), fileStem()+'-stems.zip');
+        toast(stems.length+' stem esportati. La somma degli stem ricostruisce il mix.');
+      }
+    } catch(err){ toast('Errore negli stem: '+err.message); }
+    b.textContent='↓ Stem'; b.disabled=false;
   };
   $('impjson').onclick=()=>$('file').click();
   $('file').onchange=e=>{ const f=e.target.files[0]; if(!f)return;
