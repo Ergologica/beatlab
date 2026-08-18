@@ -109,12 +109,23 @@ audio) e restituisce una cartella di lavoro: le tracce separate, un progetto
 BeatLab già suonabile e, se le chiedi, le fette da campionare.
 
 ```bash
-pip install yt-dlp demucs          # oltre a numpy e scipy; serve ffmpeg
+pip install -U "yt-dlp[default]" demucs   # oltre a numpy e scipy; serve ffmpeg
 
 python3 py/beatlab_extract.py "https://www.youtube.com/watch?v=…" -o estratto
 python3 py/beatlab_extract.py URL --two-stems --start 1:12 --duration 30
 python3 py/beatlab_extract.py brano.wav --no-separate --slices hits
 ```
+
+Due requisiti che non si indovinano, e che costano un pomeriggio a scoprirli.
+**Serve un motore JavaScript** — Deno, oppure Node passato con
+`--ytdlp-arg=--js-runtimes --ytdlp-arg=node`: da qualche versione yt-dlp firma
+le richieste a YouTube eseguendo del codice della pagina, e senza un motore
+l'unica cosa che si ottiene è un `403 Forbidden` che sembra tutt'altro
+(un blocco, una restrizione, un video protetto). E **yt-dlp va tenuto
+aggiornato**: le correzioni per YouTube escono di continuo, e una versione di
+qualche settimana fa dà lo stesso `403` a runtime perfettamente funzionante.
+Se non hai voglia di occupartene, [BeatLab Studio](desktop/) controlla queste
+cose per te e ti dice cosa manca.
 
 ```
 estratto/
@@ -178,6 +189,27 @@ Insomma: è un punto di partenza da correggere nella griglia, non un rilievo.
 > Scaricare da YouTube va contro i termini di servizio del sito, e quello che
 > esce resta materiale di chi l'ha fatto. Per pubblicarci sopra servono i
 > diritti o la licenza del campione. Lo strumento non sa distinguere: lo sai tu.
+
+## BeatLab Studio: la app in una finestra, con le mani
+
+Il browser può solo scrivere il comando dell'estrazione — una pagina su GitHub
+Pages non ha nessun posto dove far girare Demucs. Nella cartella
+[`desktop/`](desktop/) c'è un guscio Electron che ospita **la stessa app**, con
+un pulsante *Estrai* che parte davvero.
+
+```bash
+cd desktop && npm install && npm start
+```
+
+Ci si guadagna il controllo delle dipendenze (compreso il motore JavaScript qui
+sopra, con il comando per installarlo), una coda che macina un lavoro alla volta
+mentre continui a costruire il beat, il render con il motore Python sul progetto
+aperto in quel momento, e il ritorno automatico: a estrazione finita il
+`progetto.json` e la voce entrano nella app senza passare dai file.
+
+Su Windows lo Studio parla con WSL, che è dove Demucs e yt-dlp stanno davvero.
+Dalla parte della app tutto questo è un file solo, `js/host.js`, che non fa
+niente se non trova il guscio: **la versione pubblica resta identica**.
 
 ## Formato dati
 

@@ -1,0 +1,14 @@
+{
+  "name": "beatlab-studio",
+  "version": "1.0.0",
+  "description": "Guscio desktop di BeatLab: estrazione, coda e render nella stessa finestra",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:wsl": "electron . --no-sandbox"
+  },
+  "devDependencies": {
+    "electron": "^43.0.0"
+  }
+}

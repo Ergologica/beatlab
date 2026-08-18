@@ -9,7 +9,8 @@ import { isPlaying, getA, getQueued, play, stop, applyMix, resetAudio, outLatenc
 import { generate, variation } from './generator.js';
 import { encodeWav, ensureLame, encodeMp3, midiBlob, makeZip, fileStem, download } from './exporters.js';
 import { shareLink, loadFromHash, clearHash, copyLink } from './share.js';
-import { buildCommand, decodeReference, clearReference, refTooBig, ref } from './extract.js';
+import { buildCommand, decodeReference, decodeReferenceData, clearReference, refTooBig, ref } from './extract.js';
+import { initHost } from './host.js';
 import { $, toast } from './dom.js';
 
 /* Larghezza di una battuta. Col dito le celle devono essere più larghe: sotto i
@@ -472,11 +473,15 @@ function syncControls(){
     } catch(err){ toast('Errore negli stem: '+err.message); }
     b.textContent='↓ Stem'; b.disabled=false;
   };
+  /* Un progetto entra nella app sempre da qui: da un file scelto a mano, da un
+     link condiviso o dallo Studio a estrazione finita. Tre porte, una serratura. */
+  function applyProject(obj){
+    pushUndo(); fromJSON(obj); syncControls(); refresh(); buildMixer(); buildFx();
+  }
   function loadProjectFile(f){
     if(!f) return;
     const r=new FileReader();
-    r.onload=()=>{ try{ pushUndo(); fromJSON(JSON.parse(r.result)); syncControls(); refresh();
-        buildMixer(); buildFx(); toast('Caricato '+f.name); }
+    r.onload=()=>{ try{ applyProject(JSON.parse(r.result)); toast('Caricato '+f.name); }
       catch(err){ toast('JSON non valido: '+err.message); } };
     r.readAsText(f);
   }
@@ -549,6 +554,15 @@ function syncControls(){
     if(isPlaying()) toast('Lo scarto si applica dal prossimo Play.'); };
   $('refdrop').onclick=()=>{ clearReference(); syncRef(); };
   syncRef();
+
+  /* Dentro BeatLab Studio i pannelli crescono: dipendenze, coda, render. Nel
+     browser questa chiamata non fa niente e non lascia traccia. */
+  initHost({
+    toast,
+    currentProject: () => toJSON(),
+    applyProject,
+    setReference: async (data, name) => { await decodeReferenceData(data, name); syncRef(); },
+  });
 
   buildTabbar();
   let sec='ritmo';

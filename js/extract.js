@@ -48,11 +48,18 @@ export const REF_MAX_MB = 40;
 export const refTooBig = file => file && file.size > REF_MAX_MB * 1024 * 1024;
 
 export async function decodeReference(file) {
-  const data = await file.arrayBuffer();
+  return decodeReferenceData(await file.arrayBuffer(), file.name);
+}
+
+/* Stessa strada, partendo dai byte invece che da un File: dentro BeatLab Studio
+   la voce non passa da un selettore, la porge il guscio appena l'estrazione
+   finisce. Una sola funzione che decodifica, quindi un solo posto dove il
+   riferimento può rompersi. */
+export async function decodeReferenceData(data, name) {
   const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   const tmp = new Ctx(2, 1, 44100);
   const buf = await tmp.decodeAudioData(data);
-  ref.buf = buf; ref.name = file.name;
+  ref.buf = buf; ref.name = name;
   return buf;
 }
 

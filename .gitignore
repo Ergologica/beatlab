@@ -6,3 +6,9 @@
 __pycache__/
 .DS_Store
 node_modules/
+
+# uscite di lavoro: le fa lo Studio, non si versionano
+estratto*/
+prova*/
+render/
+desktop/dist/
