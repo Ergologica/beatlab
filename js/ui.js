@@ -4,10 +4,12 @@ import { proj, P, DIVS, emptyPattern, divOf, scaleRows, barDur, audible,
          pushUndo, undo, redo, histSizes, markDirty, clearDirty,
          loadAutosave, dropAutosave, toJSON, fromJSON, hooks } from './state.js';
 import { isPlaying, getA, getQueued, play, stop, applyMix, resetAudio, outLatency,
-         setCrush, setDrive, setSrDiv, renderBuffer, renderStems, preview } from './audio.js';
+         setCrush, setDrive, setSrDiv, renderBuffer, renderStems, preview,
+         setRefGain } from './audio.js';
 import { generate, variation } from './generator.js';
 import { encodeWav, ensureLame, encodeMp3, midiBlob, makeZip, fileStem, download } from './exporters.js';
 import { shareLink, loadFromHash, clearHash, copyLink } from './share.js';
+import { buildCommand, decodeReference, clearReference, refTooBig, ref } from './extract.js';
 import { $, toast } from './dom.js';
 
 /* Larghezza di una battuta. Col dito le celle devono essere più larghe: sotto i
@@ -327,7 +329,10 @@ const SECTIONS = [
   {id:'melodia', ic:'🎹', nm:'Melodia'},
   {id:'mix',     ic:'🎚', nm:'Mix'},
   {id:'brano',   ic:'✦',  nm:'Brano'},
-  {id:'esporta', ic:'↓',  nm:'Esporta'},
+  /* «File» e non «Esporta»: nella stessa scheda vive anche l'estrazione, che è
+     un ingresso. Restano cinque destinazioni, che è il massimo prima che la
+     barra in basso diventi una fila di francobolli. */
+  {id:'esporta', ic:'⇅',  nm:'File'},
 ];
 let curSec = 'ritmo';
 function showSection(id){
@@ -467,13 +472,83 @@ function syncControls(){
     } catch(err){ toast('Errore negli stem: '+err.message); }
     b.textContent='↓ Stem'; b.disabled=false;
   };
-  $('impjson').onclick=()=>$('file').click();
-  $('file').onchange=e=>{ const f=e.target.files[0]; if(!f)return;
+  function loadProjectFile(f){
+    if(!f) return;
     const r=new FileReader();
     r.onload=()=>{ try{ pushUndo(); fromJSON(JSON.parse(r.result)); syncControls(); refresh();
         buildMixer(); buildFx(); toast('Caricato '+f.name); }
       catch(err){ toast('JSON non valido: '+err.message); } };
-    r.readAsText(f); e.target.value=''; };
+    r.readAsText(f);
+  }
+  $('impjson').onclick=()=>$('file').click();
+  $('file').onchange=e=>{ loadProjectFile(e.target.files[0]); e.target.value=''; };
+
+  /* ---------- estrazione da un video ---------- */
+  const ytFields=['yturl','ytsep','ytstart','ytdur','ytbars','ytslices'];
+  function ytOpts(){
+    return { url:$('yturl').value, sep:$('ytsep').value, start:$('ytstart').value,
+             duration:$('ytdur').value, bars:+$('ytbars').value, slices:$('ytslices').value };
+  }
+  function syncCmd(){ $('ytcmd').textContent = buildCommand(ytOpts()); }
+  for(const id of ytFields){
+    const el=$(id);
+    el.addEventListener('input', syncCmd);
+    el.addEventListener('change', syncCmd);
+  }
+  syncCmd();
+  $('ytcopy').onclick=async()=>{
+    const cmd=buildCommand(ytOpts());
+    let ok=false;
+    try{ await navigator.clipboard.writeText(cmd); ok=true; }catch(e){}
+    if(ok) toast('Comando copiato. Lancialo nella cartella di BeatLab.');
+    else prompt('Copia il comando:', cmd);
+  };
+  /* Dal telefono il comando non si può eseguire: l'unica cosa sensata è
+     mandarselo dove lo si ritrova al computer. */
+  if(navigator.share){
+    $('ytshare').style.display='';
+    $('ytshare').onclick=async()=>{
+      try{ await navigator.share({title:'Comando BeatLab', text:buildCommand(ytOpts())}); }
+      catch(e){ /* annullare la condivisione non è un errore */ }
+    };
+  }
+  $('ytproj').onclick=()=>$('ytfp').click();
+  $('ytfp').onchange=e=>{ loadProjectFile(e.target.files[0]); e.target.value=''; };
+
+  function syncRef(){
+    const has=!!ref.buf;
+    $('refname').textContent = has
+      ? ref.name+' · '+Math.round(ref.buf.duration)+' s'
+      : 'nessuna traccia di riferimento';
+    $('refctl').style.display = has ? '' : 'none';
+    $('refon').textContent='Riferimento: '+(ref.on?'ON':'off');
+    $('refon').classList.toggle('on', ref.on);
+  }
+  $('ytref').onclick=()=>$('ytfr').click();
+  $('ytfr').onchange=async e=>{
+    const f=e.target.files[0]; e.target.value='';
+    if(!f) return;
+    $('refname').textContent='decodifico…';
+    try{
+      await decodeReference(f);
+      syncRef();
+      toast('Voce caricata: premi Play e la senti sopra il pattern. Non entra nell\'export.');
+    }catch(err){
+      clearReference(); syncRef();
+      toast(refTooBig(f)
+        ? 'Non ce l\'ha fatta: '+Math.round(f.size/1048576)+' MB sono troppi da tenere '
+          + 'aperti, soprattutto sul telefono. Riprova con un MP3 o con uno spezzone '
+          + '(--start e --duration nel comando).'
+        : 'Non riesco a leggere l\'audio: '+err.message);
+    }
+  };
+  $('refon').onclick=()=>{ ref.on=!ref.on; syncRef();
+    if(isPlaying()) toast('Ha effetto dal prossimo Play.'); };
+  $('refgain').oninput=e=>setRefGain(+e.target.value/100);
+  $('refoff').onchange=e=>{ ref.offset=+e.target.value||0;
+    if(isPlaying()) toast('Lo scarto si applica dal prossimo Play.'); };
+  $('refdrop').onclick=()=>{ clearReference(); syncRef(); };
+  syncRef();
 
   buildTabbar();
   let sec='ritmo';

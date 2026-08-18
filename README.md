@@ -12,7 +12,7 @@ anche offline.
 ![BeatLab](docs/schermata.png)
 
 Sul telefono l'interfaccia si riorganizza in cinque schede — Ritmo, Melodia,
-Mix, Brano, Esporta — con il trasporto sempre fermo in alto e la navigazione
+Mix, Brano, File — con il trasporto sempre fermo in alto e la navigazione
 nella zona del pollice. La colonna dei nomi resta ferma mentre la griglia
 scorre di lato, e le celle crescono per stare comode sotto il dito.
 
@@ -49,6 +49,11 @@ scorre di lato, e le celle crescono per stare comode sotto il dito.
   il frammento non viaggia nemmeno verso il server.
 - **Audizione mentre disegni**: ogni colpo e ogni nota si sentono nel momento
   in cui li metti, anche a trasporto fermo. Si spegne dal pennello *Ascolto*.
+- **Estrazione da un video**: la scheda *File* compone il comando che scarica
+  un pezzo, ne **separa la voce dalla base**, ne misura il tempo e ne trascrive
+  la batteria in un pattern già suonabile. Poi la voce estratta si ricarica
+  nella app e si sente **sopra il tuo beat**, per capire se regge sotto
+  qualcuno che canta. Dettagli sotto, in [Dal video al pattern](#dal-video-al-pattern).
 - **Modo leggero**, acceso da solo su telefoni e macchine modeste: voci con
   meno oscillatori e riverberi a rete di ritardi invece che a convoluzione.
   L'interruttore è in alto a destra. L'export resta sempre a qualità piena.
@@ -97,6 +102,83 @@ L'estensione decide il formato (`.wav` nativo; `.mp3`/`.flac`/`.ogg` via
 ffmpeg). L'anteprima del browser e il render Python condividono i **dati**, non
 il suono: il browser è la bozza, Python il master.
 
+## Dal video al pattern
+
+[`py/beatlab_extract.py`](py/beatlab_extract.py) prende un link (o un file
+audio) e restituisce una cartella di lavoro: le tracce separate, un progetto
+BeatLab già suonabile e, se le chiedi, le fette da campionare.
+
+```bash
+pip install yt-dlp demucs          # oltre a numpy e scipy; serve ffmpeg
+
+python3 py/beatlab_extract.py "https://www.youtube.com/watch?v=…" -o estratto
+python3 py/beatlab_extract.py URL --two-stems --start 1:12 --duration 30
+python3 py/beatlab_extract.py brano.wav --no-separate --slices hits
+```
+
+```
+estratto/
+  originale.wav     l'audio così com'era
+  voce.wav          la voce sola
+  base.wav          tutto tranne la voce            (--two-stems)
+  batteria.wav basso.wav altro.wav                  (separazione a quattro)
+  progetto.json     BPM, swing e pattern: si carica da File → Carica progetto.json
+  fette/            battuta-01.wav… oppure colpo-001.wav…
+  estrazione.md     cosa ha trovato, e con quanta sicurezza
+```
+
+Il lavoro pesante non può stare nel browser — yt-dlp e il modello di
+separazione pesano centinaia di megabyte — e la app vive su GitHub Pages, che
+serve file e basta. Perciò la scheda *File* fa due cose: **scrive il comando**
+con le opzioni scelte (basta copiarlo) e **rilegge quello che ne esce**, il
+`progetto.json` e la voce.
+
+La voce caricata diventa una **traccia di riferimento**: parte insieme al Play,
+ha volume e scarto in millisecondi, esce dritta all'uscita senza passare per
+master, riverberi e sidechain, e **non entra né nell'export né negli stem**. È
+un metro, non un ingrediente. La prova che sia davvero così è nella suite.
+
+### Dal telefono
+
+Metà sì. Il pannello funziona: si incolla il link, si scelgono le opzioni, e il
+tasto **↗ Invia** manda il comando dove lo si vuole — messaggio, note, posta —
+per ritrovarlo al computer. Quello che il telefono **non** può fare è eseguirlo:
+Demucs è un modello di rete neurale, non gira in un browser.
+
+Il resto invece sì, ed è la parte che serve davvero fuori casa: `progetto.json`
+e la voce estratta si caricano dal telefono come qualsiasi altro file (se sono
+sul telefono — cartella, Drive, quello che è), e da lì si suona il beat con la
+voce sopra. Una voce di un minuto si decodifica in un decimo di secondo; oltre i
+40 MB conviene un MP3 o uno spezzone, perché in memoria un WAV raddoppia.
+
+### Come misura, e dove sbaglia
+
+Il tempo si stima sull'autocorrelazione della curva di onset di **cassa e
+rullante soltanto**: gli hi-hat in sedicesimi sono una periodicità quattro
+volte più fitta e regolarissima, e chi li include finisce per misurare il
+quadruplo del tempo vero. La stima grezza viene poi affinata agganciando la
+griglia ai colpi (`fit_grid`): mezzo per cento di errore, su tre minuti, è
+mezza battuta di scarto.
+
+Il riconoscimento dei colpi non si fida del solo flusso spettrale — la cassa
+sfonda in tutte le bande — ma di **come si distribuisce l'energia**: sotto i
+140 Hz la cassa, fra 200 e 2000 il rullante, sopra i 5 kHz l'hi-hat. I pattern
+proposti sono i blocchi che tornano più spesso nel pezzo, ripuliti a
+maggioranza: un colpo sopravvive se c'era in più di metà delle ripetizioni.
+
+Su due pattern noti — sintetizzati da BeatLab, riletti da zero — tempo, «uno»,
+cassa e rullante tornano esatti. Quello che sfugge sono **gli hi-hat che
+suonano insieme alla cassa**: sotto un colpo cinquanta volte più forte spariscono.
+`--hat-gate 0.02` li recupera al prezzo di qualche colpo inventato,
+`--hat-gate 0.15` fa il contrario. L'aperto contro il chiuso è la stima più
+fragile di tutte, e in dubbio scrive chiuso.
+
+Insomma: è un punto di partenza da correggere nella griglia, non un rilievo.
+
+> Scaricare da YouTube va contro i termini di servizio del sito, e quello che
+> esce resta materiale di chi l'ha fatto. Per pubblicarci sopra servono i
+> diritti o la licenza del campione. Lo strumento non sa distinguere: lo sai tu.
+
 ## Formato dati
 
 Tutto passa per un JSON di testo, `beatlab/2` — pattern, suddivisioni, mixer,
@@ -117,7 +199,8 @@ python3 -m http.server 8000   # i moduli ES non si caricano da file://
 I file: `js/engine.js` (sintesi e voci riutilizzabili), `js/state.js` (progetto,
 undo, autosave, formato), `js/audio.js` (scheduler, render offline, stem),
 `js/generator.js`, `js/exporters.js` (WAV/MP3/MIDI/zip), `js/share.js`
-(link condivisibili), `js/ui.js`, `sw.js` (offline).
+(link condivisibili), `js/extract.js` (comando di estrazione e traccia di
+riferimento), `js/ui.js`, `sw.js` (offline).
 
 ## Test
 
@@ -127,8 +210,12 @@ python3 -m http.server 8000 &
 node tests/run.js http://localhost:8000
 ```
 
-Quarantatré verifiche su interfaccia, generatore, annullamento, terzine, audio,
-condivisione ed export. Girano da sole a ogni push
+Se un Chromium c'è già ma non dove Playwright lo cerca (container, immagini di
+CI precotte), `BEATLAB_CHROMIUM=/percorso/chrome` glielo indica invece di
+scaricarne un altro.
+
+Settantatré verifiche su interfaccia, generatore, annullamento, terzine, audio,
+condivisione, export, estrazione e comodità al tocco. Girano da sole a ogni push
 ([workflow](.github/workflows/test.yml)), insieme a un render di controllo del
 motore Python.
 

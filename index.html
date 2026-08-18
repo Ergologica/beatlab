@@ -44,7 +44,7 @@ h1 span{color:var(--amber)}
 
 .field{display:flex;flex-direction:column;gap:3px}
 .field label{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3)}
-.field select,.field input[type=number],.field input[type=text]{
+.field select,.field input[type=number],.field input[type=text],.field input[type=url]{
   background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;min-width:60px}
 input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;
   background:#2c343e;outline:none;width:100%;margin:9px 0}
@@ -120,6 +120,10 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;
 .ctl .t{font-size:11px;color:var(--tx2);display:flex;justify-content:space-between;gap:6px}
 .ctl .t b{color:var(--tx);font-weight:600}
 .hint{color:var(--tx3);font-size:11.5px;margin:7px 0 0}
+.cmd{background:#0f1319;border:1px solid var(--line);border-radius:7px;padding:9px 11px;
+  margin:9px 0 0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:var(--acc);white-space:pre-wrap;word-break:break-all;user-select:all;
+  -webkit-user-select:all}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3);
   margin:0 0 9px;font-weight:600;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .chip{font-size:10px;padding:1px 7px;border-radius:20px;background:var(--panel2);
@@ -181,10 +185,14 @@ button,.tab,.bb,.slot,.mini{touch-action:manipulation}
   .phspacer{flex:0 0 112px}
   .transport .field label{display:none}
   .transport .row{gap:8px;align-items:center}
-  .btn{padding:9px 13px}
-  .bb{padding:8px 12px}
-  .tab{padding:8px 13px}
-  .field select,.field input[type=number],.field input[type=text]{padding:8px;font-size:16px}
+  /* 44 px è la misura sotto la quale il dito comincia a sbagliare bersaglio.
+     Con font 13px e interlinea 1,45 il testo è alto 19: servono 12 px di
+     imbottitura sopra e sotto. Prima ne aveva 9 e ogni tasto stava a 39. */
+  .btn{padding:12px 14px}
+  .bb{padding:11px 13px}
+  .tab{padding:11px 14px}
+  .field select,.field input[type=number],.field input[type=text],
+  .field input[type=url]{padding:12px;font-size:16px}
   input[type=range]{height:6px;margin:12px 0}
   input[type=range]::-webkit-slider-thumb{width:20px;height:20px}
   .cols{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
@@ -327,12 +335,80 @@ button,.tab,.bb,.slot,.mini{touch-action:manipulation}
       <button class="btn" id="expmidi">↓ MIDI</button>
       <button class="btn" id="expjson">↓ JSON</button>
       <button class="btn" id="impjson">↑ Carica JSON</button>
-      <input type="file" id="file" accept=".json" style="display:none">
+      <input type="file" id="file" accept=".json,application/json,text/json,text/plain" style="display:none">
       <span class="spacer"></span>
       <span class="chip" id="savestate">—</span>
     </div>
     <p class="hint">Il link di condivisione contiene tutto il progetto: chi lo apre se lo
       trova già caricato. Gli stem sono un WAV per traccia, pronti per il DAW.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Estrai da un video
+      <span class="chip hide-sm">voce e base separate · tempo · pattern · fette</span>
+    </h2>
+    <div class="row">
+      <div class="field" style="flex:1 1 240px"><label>Link del video</label>
+        <!-- sul telefono un URL va scritto com'è: niente maiuscola d'ufficio,
+             niente correttore, tastiera con la barra e il punto -->
+        <input type="url" id="yturl" inputmode="url" autocapitalize="off"
+               autocorrect="off" autocomplete="off" spellcheck="false"
+               placeholder="https://www.youtube.com/watch?v=…"></div>
+      <div class="field"><label>Separazione</label>
+        <select id="ytsep">
+          <option value="2" selected>voce + base</option>
+          <option value="4">4 tracce: voce, batteria, basso, altro</option>
+          <option value="0">nessuna</option>
+        </select></div>
+      <div class="field"><label>Da</label>
+        <input type="text" id="ytstart" placeholder="1:12" style="width:74px"></div>
+      <div class="field"><label>Durata (s)</label>
+        <input type="number" id="ytdur" min="5" max="900" placeholder="30" style="width:84px"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Battute per pattern</label>
+        <select id="ytbars"><option>1</option><option selected>2</option>
+          <option>4</option><option>8</option></select></div>
+      <div class="field"><label>Fette</label>
+        <select id="ytslices">
+          <option value="none" selected>niente</option>
+          <option value="bars">una per battuta</option>
+          <option value="hits">una per colpo</option>
+        </select></div>
+      <button class="btn primary" id="ytcopy">⧉ Copia il comando</button>
+      <!-- dal telefono copiare serve a poco: il comando va portato al computer -->
+      <button class="btn" id="ytshare" style="display:none">↗ Invia</button>
+      <span class="spacer"></span>
+      <span class="chip">una volta sola: <b>pip install yt-dlp demucs</b></span>
+    </div>
+    <pre class="cmd" id="ytcmd"></pre>
+    <p class="hint">Lo scaricamento e la separazione girano sul tuo computer, non qui:
+      servono yt-dlp e Demucs, che pesano troppo per un browser. Lancia il comando
+      nella cartella di BeatLab e ti ritrovi <b>estratto/</b> con voce, base,
+      <b>progetto.json</b> e il resoconto. Scaricare da YouTube va contro i termini
+      del sito, e il pezzo resta di chi l'ha fatto: per pubblicarci sopra servono
+      i diritti o la licenza del campione.</p>
+
+    <div class="row">
+      <button class="btn" id="ytproj">↑ Carica progetto.json</button>
+      <button class="btn" id="ytref">↑ Carica la voce estratta</button>
+      <!-- Android filtra per tipo MIME, non per estensione: con il solo «.json»
+           il selettore mostra una cartella vuota e sembra che i file non ci siano -->
+      <input type="file" id="ytfp" accept=".json,application/json,text/json,text/plain" style="display:none">
+      <input type="file" id="ytfr" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus" style="display:none">
+      <span class="spacer"></span>
+      <span class="chip" id="refname">nessuna traccia di riferimento</span>
+    </div>
+    <div class="row" id="refctl" style="display:none">
+      <button class="btn sm on" id="refon">Riferimento: ON</button>
+      <div class="field"><label>Volume</label>
+        <input type="range" id="refgain" min="0" max="140" value="90" style="width:120px"></div>
+      <div class="field"><label>Scarto (ms)</label>
+        <input type="number" id="refoff" value="0" step="10" style="width:84px"></div>
+      <button class="btn sm" id="refdrop">Togli</button>
+      <span class="spacer"></span>
+      <span class="chip">parte insieme al Play · non entra nell'export</span>
+    </div>
   </div>
 </section>
 </main>

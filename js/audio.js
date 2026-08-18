@@ -7,6 +7,7 @@ import { TRACKS, TID, DRUMS, MELS, clamp, mulberry32, buildGraph, makeLaun, make
          fireDrum, fireNote, duckAt, crushCurve, shaper, routeDecim,
          setLight, isLight, suggestLight } from './engine.js';
 import { proj, divOf, audible, chainList, barDur, stepDur, stepTime } from './state.js';
+import { ref } from './extract.js';
 import { $ } from './dom.js';
 
 let A=null, playing=false, booting=false;
@@ -116,6 +117,32 @@ function schedulePattern(ctx,N,pi,t0,st,rng){
   return t0 + p.bars*barDur();
 }
 
+/* ---------- traccia di riferimento ----------
+   Va all'uscita per conto suo: niente master, niente bitcrush, niente riverbero
+   e niente sidechain. Serve a giudicare il beat, non a farne parte — e infatti
+   non compare né nell'export né negli stem. */
+let refNodes=null;
+function startReference(ctx, at){
+  stopReference();
+  if(!ref.buf || !ref.on) return;
+  const src=ctx.createBufferSource(); src.buffer=ref.buf;
+  const g=ctx.createGain(); g.gain.value=ref.gain;
+  src.connect(g).connect(ctx.destination);
+  /* scarto positivo = la voce entra dopo; negativo = si parte più avanti nel file */
+  const off=(ref.offset||0)/1000;
+  if(off>=0) src.start(at+off, 0);
+  else src.start(at, Math.min(-off, Math.max(ref.buf.duration-0.05,0)));
+  refNodes={src,g};
+}
+function stopReference(){
+  if(!refNodes) return;
+  try{ refNodes.src.stop(); }catch(e){}
+  try{ refNodes.src.disconnect(); refNodes.g.disconnect(); }catch(e){}
+  refNodes=null;
+}
+export function refPlaying(){ return !!refNodes; }
+export function setRefGain(v){ ref.gain=v; if(refNodes) refNodes.g.gain.value=v; }
+
 export async function play(){
   if(playing||booting) return;
   booting=true;
@@ -125,6 +152,7 @@ export async function play(){
     playing=true; chainIdx=0; schedState={openHat:null};
     playRng=mulberry32((proj.seed||1)+7);
     queuedUntil = ctx.currentTime+0.18; queuedPatterns=[];
+    startReference(ctx, queuedUntil);
     tick();
     startClock(tick);
   } finally { booting=false; }
@@ -144,7 +172,7 @@ function tick(){
   }
 }
 export function stop(){
-  playing=false; stopClock();
+  playing=false; stopClock(); stopReference();
   if(A){ const {ctx,N}=A, t=ctx.currentTime;
     if(N.persist.laun) N.persist.laun.stop(t);
     if(N.persist.drone) N.persist.drone.set(t,false,1);

@@ -20,8 +20,13 @@ const ok = (name, cond, detail = '') => {
 };
 const near = (a, b, tol) => Math.abs(a - b) <= tol;
 
+/* Dove un Chromium c'è già ma non è quello che Playwright si aspetta
+   (container, CI con le immagini precotte), lo si indica invece di scaricarne
+   un altro da mezzo giga. */
+const EXE = process.env.BEATLAB_CHROMIUM || undefined;
+
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(EXE ? { executablePath: EXE } : {});
   const ctx = await browser.newContext({ acceptDownloads: true });
   const page = await ctx.newPage();
   const errors = [];
@@ -253,6 +258,78 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
   });
   ok('il mixer torna com\'era dopo gli stem', mixOk);
 
+  // ---------------------------------------------------------------- estrazione
+  console.log('\nestrazione da un video');
+  const cmd = await page.evaluate(async () => {
+    const x = await import('./js/extract.js');
+    return {
+      vuoto: x.buildCommand({}),
+      base: x.buildCommand({ url: 'https://youtu.be/abc123' }),
+      tutto: x.buildCommand({
+        url: 'https://youtu.be/abc123', sep: '4', start: '1:12',
+        duration: '30', bars: 4, slices: 'hits',
+      }),
+      niente: x.buildCommand({ url: 'https://youtu.be/abc123', sep: '0' }),
+      sporco: x.buildCommand({ url: '  "https://youtu.be/x"; rm -rf /  ' }),
+      oraNo: x.buildCommand({ url: 'u', start: 'domani', duration: 'tanto' }),
+    };
+  });
+  ok('il comando nomina lo script giusto', cmd.vuoto.startsWith('python3 py/beatlab_extract.py'));
+  ok('senza link resta un segnaposto', cmd.vuoto.includes('INCOLLA-QUI-IL-LINK'));
+  ok('voce + base è il default', cmd.base.includes('--two-stems') && !cmd.base.includes('--bars'));
+  ok('quattro tracce tolgono --two-stems', !cmd.tutto.includes('--two-stems'));
+  ok('le opzioni finiscono nel comando',
+    cmd.tutto.includes('--start 1:12') && cmd.tutto.includes('--duration 30')
+    && cmd.tutto.includes('--bars 4') && cmd.tutto.includes('--slices hits'), cmd.tutto);
+  ok('«nessuna separazione» passa --no-separate', cmd.niente.includes('--no-separate'));
+  ok('le virgolette incollate per sbaglio spariscono',
+    !cmd.sporco.replace(/^[^"]*"|"[^"]*$/g, '').includes('"'), cmd.sporco);
+  ok('un tempo che non è un tempo viene ignorato',
+    !cmd.oraNo.includes('--start') && !cmd.oraNo.includes('--duration'), cmd.oraNo);
+
+  const panel = await page.evaluate(() => ({
+    url: !!document.getElementById('yturl'),
+    copia: !!document.getElementById('ytcopy'),
+    prog: !!document.getElementById('ytproj'),
+    rif: !!document.getElementById('ytref'),
+    ctl: getComputedStyle(document.getElementById('refctl')).display,
+    cmd: document.getElementById('ytcmd').textContent,
+  }));
+  ok('il pannello di estrazione c\'è', panel.url && panel.copia && panel.prog && panel.rif);
+  ok('i controlli del riferimento sono nascosti finché non se ne carica uno',
+    panel.ctl === 'none');
+  ok('il comando è già scritto all\'avvio', panel.cmd.includes('beatlab_extract.py'));
+
+  // la voce di riferimento si sente, ma non deve finire nell'export
+  const rif = await page.evaluate(async () => {
+    const x = await import('./js/extract.js');
+    const e = await import('./js/exporters.js');
+    const a = await import('./js/audio.js');
+    const st = await import('./js/state.js');
+    /* mezzo secondo di rumore, impacchettato come farebbe un file vero */
+    const oc = new OfflineAudioContext(2, 22050, 44100);
+    const b = oc.createBuffer(2, 22050, 44100);
+    for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(c);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 7) * 0.5;
+    }
+    const wav = e.encodeWav(b);
+    const file = new File([wav], 'voce.wav', { type: 'audio/wav' });
+    await x.decodeReference(file);
+    const dur = x.ref.buf.duration;
+    st.proj.patterns[st.proj.cur] = st.emptyPattern(1);
+    st.proj.cur = 0; st.proj.song = false;
+    const out = await a.renderBuffer(1);
+    let peak = 0;
+    const ch = out.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) peak = Math.max(peak, Math.abs(ch[i]));
+    x.clearReference();
+    return { dur, nome: x.ref.name, peak };
+  });
+  ok('la traccia di riferimento si decodifica', Math.abs(rif.dur - 0.5) < 0.02, rif.dur + ' s');
+  ok('il riferimento non entra nell\'export', rif.peak === 0, 'picco ' + rif.peak);
+  ok('togliere il riferimento lo toglie davvero', rif.nome === '');
+
   // ---------------------------------------------------------------- riproduzione
   console.log('\nriproduzione');
   await page.click('#play');
@@ -316,6 +393,36 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
   });
   ok('la navigazione cambia sezione', nav.on.length === 1 && nav.on[0] === 'mix', nav.on.join(','));
   ok('il mixer è raggiungibile dal telefono', nav.mixer === 13);
+
+  /* La regola dei 44 px vale per tutti i comandi, non solo per la barra in
+     basso: erano fermi a 39 e nessuno li aveva mai misurati. */
+  const file = await mp.evaluate(() => {
+    document.querySelector('#tabbar button[data-sec=esporta]').click();
+    const sec = document.querySelector('main>section[data-sec=esporta]');
+    const els = [...sec.querySelectorAll('button, select, input[type=text], input[type=url], input[type=number]')]
+      .filter(e => e.offsetParent !== null && !e.classList.contains('mini'));
+    const h = els.map(e => ({ id: e.id || e.textContent.trim().slice(0, 12),
+                              h: Math.round(e.getBoundingClientRect().height) }));
+    return {
+      n: h.length,
+      minima: Math.min(...h.map(x => x.h)),
+      piccoli: h.filter(x => x.h < 44).map(x => x.id + ':' + x.h).join(' '),
+      scrollOrizzontale: document.documentElement.scrollWidth > innerWidth + 1,
+      cmdDentro: (() => { const c = document.getElementById('ytcmd');
+        return c.scrollWidth <= Math.ceil(c.getBoundingClientRect().width) + 1; })(),
+      urlNonCorretto: (e => e.getAttribute('autocapitalize') === 'off'
+        && e.getAttribute('spellcheck') === 'false')(document.getElementById('yturl')),
+      acceptJson: document.getElementById('ytfp').accept.includes('application/json'),
+      acceptAudio: document.getElementById('ytfr').accept.includes('.wav'),
+    };
+  });
+  ok('comandi di almeno 44 px anche nella scheda File',
+    file.minima >= 44, file.piccoli || file.minima + ' px su ' + file.n);
+  ok('la scheda File non scorre in orizzontale', !file.scrollOrizzontale);
+  ok('il comando va a capo invece di sbordare', file.cmdDentro);
+  ok('il campo del link non viene corretto dalla tastiera', file.urlNonCorretto);
+  ok('i selettori di file non filtrano via i file veri',
+    file.acceptJson && file.acceptAudio);
   ok('nessun errore su telefono', mobErrors.length === 0, mobErrors.slice(0, 2).join(' | '));
   await mob.close();
 
